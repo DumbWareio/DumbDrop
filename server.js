@@ -17,6 +17,12 @@ const app = express();
 // Add this line to trust the first proxy
 app.set('trust proxy', 1);
 const port = process.env.PORT || 3000;
+
+// Storage configuration
+const storageType = process.env.DUMBDROP_STORAGE || 'local';
+if (storageType !== 'local') {
+    log.error(`Unsupported storage type: ${storageType}. Defaulting to 'local'`);
+}
 const uploadDir = './uploads';  // Local development
 const maxFileSize = parseInt(process.env.MAX_FILE_SIZE || '1024') * 1024 * 1024; // Convert MB to bytes
 const APPRISE_URL = process.env.APPRISE_URL;
