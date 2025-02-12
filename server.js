@@ -11,7 +11,7 @@ const execAsync = util.promisify(exec);
 require('dotenv').config();
 const { S3Client } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-const { PutObjectCommand, HeadObjectCommand, ListObjectsV2Command, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand } = require('@aws-sdk/client-s3');
+const { PutObjectCommand, HeadObjectCommand, ListObjectsV2Command, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { NodeHttpHandler } = require('@aws-sdk/node-http-handler');
 
 // Rate limiting setup
@@ -477,6 +477,9 @@ if (process.env.DUMBDROP_STORAGE === 's3') {
                         
                         await s3Client.send(getCommand);
                         log.success('Successfully verified GetObject permissions');
+
+                        // Clean up test file
+                        await cleanupTestFile(s3Client, process.env.DUMBDROP_S3_BUCKET, testKey);
                     } catch (err) {
                         if (err.name !== 'NotFound') {
                             // If error is not NotFound, we might have a permissions issue
@@ -511,6 +514,9 @@ if (process.env.DUMBDROP_STORAGE === 's3') {
                         const putResponse = await s3Client.send(putCommand);
                         log.success('Successfully put test object');
                         log.info(`Put response metadata: ${JSON.stringify(putResponse.$metadata, null, 2)}`);
+
+                        // Clean up the test file
+                        await cleanupTestFile(s3Client, process.env.DUMBDROP_S3_BUCKET, testKey);
 
                         // Test multipart upload operations
                         try {
@@ -561,6 +567,9 @@ if (process.env.DUMBDROP_STORAGE === 's3') {
                             const completeResponse = await s3Client.send(completeCommand);
                             log.success('Successfully completed multipart upload');
                             log.info(`Complete response metadata: ${JSON.stringify(completeResponse.$metadata, null, 2)}`);
+
+                            // Clean up test multipart file
+                            await cleanupTestFile(s3Client, process.env.DUMBDROP_S3_BUCKET, testKey);
                         } catch (multipartErr) {
                             log.error(`Multipart operations failed: ${multipartErr.message}`);
                             log.error(`Error name: ${multipartErr.name}`);
@@ -840,6 +849,9 @@ app.post('/upload/init', initUploadLimiter, async (req, res) => {
                     
                     await s3Client.send(getCommand);
                     log.success('Successfully verified GetObject permissions');
+
+                    // Clean up test file
+                    await cleanupTestFile(s3Client, process.env.DUMBDROP_S3_BUCKET, testKey);
                 } catch (err) {
                     if (err.name !== 'NotFound') {
                         // If error is not NotFound, we might have a permissions issue
@@ -1271,5 +1283,23 @@ async function sendNotification(filename, fileSize) {
         log.info(`Notification sent for: ${sanitizedFilename} (${formattedSize}, Total storage: ${totalStorage})`);
     } catch (err) {
         log.error(`Failed to send notification: ${err.message}`);
+    }
+}
+
+// Add cleanup function
+async function cleanupTestFile(s3Client, bucket, key) {
+    try {
+        log.info(`Cleaning up test file: ${key}`);
+        await s3Client.send(new DeleteObjectCommand({
+            Bucket: bucket,
+            Key: key
+        }));
+        log.success(`Successfully cleaned up test file: ${key}`);
+    } catch (err) {
+        log.error(`Failed to cleanup test file ${key}: ${err.message}`);
+        if (err.$metadata) {
+            log.error(`Cleanup error metadata: ${JSON.stringify(err.$metadata, null, 2)}`);
+        }
+        throw err; // Re-throw the error to ensure it's not silently ignored
     }
 }
