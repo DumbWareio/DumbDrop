@@ -126,7 +126,7 @@
                 }
             }
 
-            startWaitingMessages() {
+            startWaitingMessage() {
                 if (this.waitingMessageInterval) {
                     clearInterval(this.waitingMessageInterval);
                 }
@@ -135,7 +135,7 @@
                 this.cycleWaitingMessage(); // Show first message immediately
             }
 
-            stopWaitingMessages() {
+            stopWaitingMessage() {
                 if (this.waitingMessageInterval) {
                     clearInterval(this.waitingMessageInterval);
                     this.waitingMessageInterval = null;
@@ -230,7 +230,7 @@
                         this.progressElement.infoSpan.textContent = `Error: ${error.message}`;
                         this.progressElement.infoSpan.style.color = 'var(--danger-color)';
                     }
-                    this.stopWaitingMessages();
+                    this.stopWaitingMessage();
                     return false;
                 }
             }
@@ -261,6 +261,8 @@
                 }
                 const data = await response.json();
                 this.uploadId = data.uploadId;
+                this.uploadUrl = data.uploadUrl;
+                this.filePath = data.filePath;
             }
 
             async uploadChunks() {
@@ -289,20 +291,17 @@
             }
 
             async uploadChunk(chunk) {
-                const controller = new AbortController();
-                const response = await fetch(`/upload/chunk/${this.uploadId}`, {
-                    method: 'POST',
+                const response = await fetch(this.uploadUrl || this.filePath, {
+                    method: this.uploadUrl ? 'PUT' : 'POST',
                     headers: {
                         'Content-Type': 'application/octet-stream'
                     },
-                    body: chunk,
-                    signal: controller.signal
+                    body: chunk
                 });
 
                 if (!response.ok) throw new Error('Chunk upload failed');
-                const data = await response.json();
-                this.bytesReceived = Math.floor((data.progress / 100) * this.file.size);
-                this.updateProgress(data.progress);
+                this.bytesReceived += chunk.byteLength;
+                this.updateProgress((this.bytesReceived / this.file.size) * 100);
             }
 
             createProgressElement() {
@@ -349,7 +348,7 @@
                 this.progressElement = { container, bar, infoSpan, details };
                 
                 // Start cycling waiting messages
-                this.startWaitingMessages();
+                this.startWaitingMessage();
             }
 
             updateProgress(percent) {
@@ -359,7 +358,7 @@
                     
                     // Stop waiting messages once we start receiving data
                     if (this.bytesReceived > 0) {
-                        this.stopWaitingMessages();
+                        this.stopWaitingMessage();
                     }
                     
                     const timeRemaining = this.calculateTimeRemaining(this.bytesReceived, speed);
@@ -376,7 +375,7 @@
                         `${formatFileSize(this.bytesReceived)} of ${formatFileSize(this.file.size)} (${percent.toFixed(1)}%)`;
 
                     if (percent === 100) {
-                        this.stopWaitingMessages();
+                        this.stopWaitingMessage();
                         this.clearTimers();
                         setTimeout(() => {
                             this.progressElement.container.remove();

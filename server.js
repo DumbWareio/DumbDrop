@@ -9,6 +9,9 @@ const { exec } = require('child_process');
 const util = require('util');
 const execAsync = util.promisify(exec);
 require('dotenv').config();
+const { S3Client } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { PutObjectCommand } = require('@aws-sdk/client-s3');
 
 // Rate limiting setup
 const rateLimit = require('express-rate-limit');
@@ -18,9 +21,16 @@ const app = express();
 app.set('trust proxy', 1);
 const port = process.env.PORT || 3000;
 
+// Logging helper
+const log = {
+    info: (msg) => console.log(`[INFO] ${new Date().toISOString()} - ${msg}`),
+    error: (msg) => console.error(`[ERROR] ${new Date().toISOString()} - ${msg}`),
+    success: (msg) => console.log(`[SUCCESS] ${new Date().toISOString()} - ${msg}`)
+};
+
 // Storage configuration
 const storageType = process.env.DUMBDROP_STORAGE || 'local';
-if (storageType !== 'local') {
+if (storageType !== 'local' && storageType !== 's3') {
     log.error(`Unsupported storage type: ${storageType}. Defaulting to 'local'`);
 }
 const uploadDir = './uploads';  // Local development
@@ -95,13 +105,6 @@ const validatePin = (pin) => {
 };
 const PIN = validatePin(process.env.DUMBDROP_PIN);
 
-// Logging helper
-const log = {
-    info: (msg) => console.log(`[INFO] ${new Date().toISOString()} - ${msg}`),
-    error: (msg) => console.error(`[ERROR] ${new Date().toISOString()} - ${msg}`),
-    success: (msg) => console.log(`[SUCCESS] ${new Date().toISOString()} - ${msg}`)
-};
-
 // Helper function to ensure directory exists
 async function ensureDirectoryExists(filePath) {
     const dir = path.dirname(filePath);
@@ -139,13 +142,20 @@ app.use(express.json());
 
 // Security headers middleware
 app.use((req, res, next) => {
+    // Build connect-src directive based on storage type
+    let connectSrc = "'self'";
+    if (process.env.DUMBDROP_STORAGE === 's3' && process.env.DUMBDROP_S3_ENDPOINT) {
+        connectSrc += ` ${process.env.DUMBDROP_S3_ENDPOINT}`;
+    }
+
     // Content Security Policy
     res.setHeader(
         'Content-Security-Policy',
         "default-src 'self'; " +
         "style-src 'self' 'unsafe-inline' cdn.jsdelivr.net; " +
         "script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; " +
-        "img-src 'self' data: blob:;"
+        "img-src 'self' data: blob:; " +
+        `connect-src ${connectSrc}`
     );
     // X-Content-Type-Options
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -348,118 +358,42 @@ function isValidBatchId(batchId) {
     return /^\d+-[a-z0-9]{9}$/.test(batchId);
 }
 
+let s3Client;
+if (process.env.DUMBDROP_STORAGE === 's3') {
+    s3Client = new S3Client({
+        region: process.env.DUMBDROP_S3_REGION,
+        endpoint: process.env.DUMBDROP_S3_ENDPOINT,
+        credentials: {
+            accessKeyId: process.env.DUMBDROP_S3_KEY,
+            secretAccessKey: process.env.DUMBDROP_S3_SECRET,
+        },
+        forcePathStyle: true // Needed for some S3-compatible services
+    });
+}
+
 // Routes
-app.post('/upload/init', initUploadLimiter, async (req, res) => {
+app.post('/upload/init', async (req, res) => {
     const { filename, fileSize } = req.body;
-    let batchId = req.headers['x-batch-id'];
-
-    // For single file uploads without a batch ID, generate one
-    if (!batchId) {
-        const timestamp = Date.now();
-        const randomStr = crypto.randomBytes(4).toString('hex').substring(0, 9);
-        batchId = `${timestamp}-${randomStr}`;
-    } else if (!isValidBatchId(batchId)) {
-        log.error('Invalid batch ID format');
-        return res.status(400).json({ error: 'Invalid batch ID format' });
-    }
-
-    // Always update batch activity timestamp for any upload
-    batchActivity.set(batchId, Date.now());
-
-    const safeFilename = path.normalize(filename).replace(/^(\.\.(\/|\\|$))+/, '');
-    
-    // Validate file extension
-    const allowedExtensions = process.env.ALLOWED_EXTENSIONS ? 
-        process.env.ALLOWED_EXTENSIONS.split(',').map(ext => ext.trim().toLowerCase()) : 
-        null;
-    
-    if (allowedExtensions) {
-        const fileExt = path.extname(safeFilename).toLowerCase();
-        if (!allowedExtensions.includes(fileExt)) {
-            log.error(`File type ${fileExt} not allowed`);
-            return res.status(400).json({ 
-                error: 'File type not allowed',
-                allowedExtensions
-            });
-        }
-    }
-    
-    // Check file size limit
-    if (fileSize > maxFileSize) {
-        log.error(`File size ${fileSize} bytes exceeds limit of ${maxFileSize} bytes`);
-        return res.status(413).json({ 
-            error: 'File too large',
-            limit: maxFileSize,
-            limitInMB: maxFileSize / (1024 * 1024)
-        });
-    }
-
     const uploadId = crypto.randomBytes(16).toString('hex');
-    let filePath = path.join(uploadDir, safeFilename);
-    let fileHandle;
-    
+
     try {
-        // Handle file/folder duplication
-        const pathParts = safeFilename.split('/');
-        
-        if (pathParts.length > 1) {
-            // This is a file within a folder
-            const originalFolderName = pathParts[0];
-            const folderPath = path.join(uploadDir, originalFolderName);
+        if (process.env.DUMBDROP_STORAGE === 's3') {
+            const command = new PutObjectCommand({
+                Bucket: process.env.DUMBDROP_S3_BUCKET,
+                Key: filename,
+                ContentLength: fileSize,
+                ContentType: 'application/octet-stream'
+            });
 
-            // Check if we already have a mapping for this folder in this batch
-            let newFolderName = folderMappings.get(`${originalFolderName}-${batchId}`);
-            
-            if (!newFolderName) {
-                try {
-                    // Try to create the folder atomically first
-                    await fs.promises.mkdir(folderPath, { recursive: false });
-                    newFolderName = originalFolderName;
-                } catch (err) {
-                    if (err.code === 'EEXIST') {
-                        // Folder exists, get a unique name
-                        const uniqueFolderPath = await getUniqueFolderPath(folderPath);
-                        newFolderName = path.basename(uniqueFolderPath);
-                        log.info(`Folder "${originalFolderName}" exists, using "${newFolderName}" instead`);
-                    } else {
-                        throw err;
-                    }
-                }
-                
-                folderMappings.set(`${originalFolderName}-${batchId}`, newFolderName);
-            }
-
-            // Replace the original folder path with the mapped one and keep original file name
-            pathParts[0] = newFolderName;
-            filePath = path.join(uploadDir, ...pathParts);
-            
-            // Ensure parent directories exist
+            const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+            res.json({ uploadId, uploadUrl });
+        } else {
+            // Local storage logic
+            const filePath = path.join(__dirname, 'uploads', filename);
             await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+            res.json({ uploadId, filePath });
         }
-
-        // For both single files and files in folders, get a unique path and file handle
-        const result = await getUniqueFilePath(filePath);
-        filePath = result.path;
-        fileHandle = result.handle;
-        
-        // Create upload entry (using the file handle we already have)
-        uploads.set(uploadId, {
-            safeFilename: path.relative(uploadDir, filePath),
-            filePath,
-            fileSize,
-            bytesReceived: 0,
-            writeStream: fileHandle.createWriteStream()
-        });
-
-        log.info(`Initialized upload for ${path.relative(uploadDir, filePath)} (${fileSize} bytes)`);
-        res.json({ uploadId });
     } catch (err) {
-        // Clean up file handle if something went wrong
-        if (fileHandle) {
-            await fileHandle.close().catch(() => {});
-            // Try to remove the file if it was created
-            fs.unlink(filePath).catch(() => {});
-        }
         log.error(`Failed to initialize upload: ${err.message}`);
         res.status(500).json({ error: 'Failed to initialize upload' });
     }
