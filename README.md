@@ -37,6 +37,8 @@ services:
             DUMBDROP_PIN: 123456
             # Upload without clicking button
             AUTO_UPLOAD: false
+            # Storage Configuration (local or s3)
+            DUMBDROP_STORAGE: local
 ```
 
 Then run:
@@ -47,6 +49,38 @@ docker compose up -d
 1. Go to http://localhost:3000
 2. Upload a File - It'll show up in ./local_uploads
 3. Rejoice in the glory of your dumb uploads
+
+### Storage Configuration
+
+DumbDrop supports two storage backends:
+
+#### Local Storage (Default)
+Files are stored directly on the local filesystem. This is the simplest setup and requires no additional configuration.
+```yaml
+services:
+    dumbdrop:
+        environment:
+            DUMBDROP_STORAGE: local  # This is the default, can be omitted
+```
+
+#### S3-Compatible Storage
+Support for any S3-compatible storage service (AWS S3, MinIO, etc). Enable by setting the following environment variables:
+```yaml
+services:
+    dumbdrop:
+        environment:
+            DUMBDROP_STORAGE: s3
+            DUMBDROP_S3_KEY: <your-access-key>
+            DUMBDROP_S3_SECRET: <your-secret-key>
+            DUMBDROP_S3_BUCKET: <your-bucket-name>
+            DUMBDROP_S3_ENDPOINT: <your-endpoint>
+            DUMBDROP_S3_REGION: <your-region>
+```
+
+S3 storage features:
+- Multipart upload support for large files
+- Folder structure preservation
+- Presigned URL support for direct-to-S3 uploads
 
 ### Option 3: Running Locally (For Developers)
 
@@ -98,6 +132,12 @@ docker run -p 3000:3000 -v "${PWD}\local_uploads:/app/uploads" dumbwareio/dumbdr
 | MAX_FILE_SIZE    | Maximum file size in MB               | 1024    | No       |
 | DUMBDROP_PIN     | PIN protection (4-10 digits)          | None    | No       |
 | DUMBDROP_TITLE   | Site title displayed in header        | DumbDrop| No       |
+| DUMBDROP_STORAGE | Storage backend (local or s3)         | local   | No       |
+| DUMBDROP_S3_KEY  | S3 access key                        | None    | Yes (if s3) |
+| DUMBDROP_S3_SECRET | S3 secret key                      | None    | Yes (if s3) |
+| DUMBDROP_S3_BUCKET | S3 bucket name                     | None    | Yes (if s3) |
+| DUMBDROP_S3_ENDPOINT | S3 endpoint URL                  | None    | Yes (if s3) |
+| DUMBDROP_S3_REGION | S3 region                         | None    | Yes (if s3) |
 | APPRISE_URL      | Apprise URL for notifications         | None    | No       |
 | APPRISE_MESSAGE  | Notification message template         | New file uploaded {filename} ({size}), Storage used {storage} | No |
 | APPRISE_SIZE_UNIT| Size unit for notifications           | Auto    | No       |

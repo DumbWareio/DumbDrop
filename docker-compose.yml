@@ -7,8 +7,15 @@ services:
             # Replace "./local_uploads" ( before the colon ) with the path where the files land
             - ./local_uploads:/app/uploads 
         environment:
+            ## General Settings
             DUMBDROP_TITLE: DumbDrop # Replace "DumbDrop" with the title you want to display
             MAX_FILE_SIZE: 1024 # Replace "1024" with the maximum file size you want to allow in MB
             DUMBDROP_PIN: 123456 # Replace "123456" with the pin you want to use 
             AUTO_UPLOAD: false # Set to true if you want dont want to have to click the upload button
-            DUMBDROP_STORAGE: local # Storage type - currently only 'local' is supported
+            ## Storage Settings
+            # DUMBDROP_STORAGE: local # Set to s3 if you want to use S3 compatible storage
+            # DUMBDROP_S3_KEY: <your-access-key>
+            # DUMBDROP_S3_SECRET: <your-secret-key>
+            # DUMBDROP_S3_BUCKET: <your-bucket-name>
+            # DUMBDROP_S3_ENDPOINT: <your-endpoint>
+            # DUMBDROP_S3_REGION: <your-region>
