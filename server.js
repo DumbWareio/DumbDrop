@@ -11,7 +11,8 @@ const execAsync = util.promisify(exec);
 require('dotenv').config();
 const { S3Client } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-const { PutObjectCommand, HeadObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
+const { PutObjectCommand, HeadObjectCommand, ListObjectsV2Command, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand } = require('@aws-sdk/client-s3');
+const { NodeHttpHandler } = require('@aws-sdk/node-http-handler');
 
 // Rate limiting setup
 const rateLimit = require('express-rate-limit');
@@ -366,6 +367,26 @@ function isValidBatchId(batchId) {
 
 let s3Client;
 if (process.env.DUMBDROP_STORAGE === 's3') {
+    (async () => {
+        try {
+            // Validate required S3 configuration
+            const requiredS3Config = [
+                'DUMBDROP_S3_REGION',
+                'DUMBDROP_S3_ENDPOINT',
+                'DUMBDROP_S3_KEY',
+                'DUMBDROP_S3_SECRET',
+                'DUMBDROP_S3_BUCKET'
+            ];
+
+            const missingConfig = requiredS3Config.filter(key => !process.env[key]);
+            if (missingConfig.length > 0) {
+                throw new Error(`Missing required S3 configuration: ${missingConfig.join(', ')}`);
+            }
+
+            // Parse endpoint URL to determine if it's HTTP/HTTPS
+            const endpointUrl = new URL(process.env.DUMBDROP_S3_ENDPOINT);
+            const useSSL = endpointUrl.protocol === 'https:';
+
     s3Client = new S3Client({
         region: process.env.DUMBDROP_S3_REGION,
         endpoint: process.env.DUMBDROP_S3_ENDPOINT,
@@ -373,8 +394,234 @@ if (process.env.DUMBDROP_STORAGE === 's3') {
             accessKeyId: process.env.DUMBDROP_S3_KEY,
             secretAccessKey: process.env.DUMBDROP_S3_SECRET,
         },
-        forcePathStyle: true // Needed for some S3-compatible services
-    });
+                forcePathStyle: true, // Required for MinIO
+                signingRegion: process.env.DUMBDROP_S3_REGION,
+                maxAttempts: 3,
+                tls: useSSL,
+                // Disable AWS specific features
+                useAccelerateEndpoint: false,
+                useDualstackEndpoint: false,
+                useFipsEndpoint: false,
+                retryMode: 'standard',
+                requestHandler: new NodeHttpHandler({
+                    connectionTimeout: 5000,
+                    socketTimeout: 5000,
+                    // Add these headers for Cloudflare
+                    headers: {
+                        'Host': new URL(process.env.DUMBDROP_S3_ENDPOINT).hostname
+                    }
+                }),
+                // Add this for presigned URLs through Cloudflare
+                customUserAgent: 'MinIO (DumbDrop)'
+            });
+
+            // Test S3 connection and permissions with more detailed error logging
+            log.info('Testing S3 connection and permissions...');
+            log.info(`Using endpoint: ${process.env.DUMBDROP_S3_ENDPOINT}`);
+            log.info(`Using bucket: ${process.env.DUMBDROP_S3_BUCKET}`);
+            log.info(`Using region: ${process.env.DUMBDROP_S3_REGION}`);
+            log.info(`Using access key: ${process.env.DUMBDROP_S3_KEY}`);
+            log.info(`Using SSL: ${useSSL}`);
+            
+            // Try to perform basic operations
+            const testOps = async () => {
+                try {
+                    // First, try a simple list operation to check bucket access
+                    try {
+                        log.info('Testing ListObjectsV2 operation...');
+                        const listCommand = new ListObjectsV2Command({
+                            Bucket: process.env.DUMBDROP_S3_BUCKET,
+                            MaxKeys: 1
+                        });
+                        log.info('Sending ListObjectsV2 command...');
+                        const listResponse = await s3Client.send(listCommand);
+                        log.success('Successfully listed bucket contents');
+                        log.info(`List response metadata: ${JSON.stringify(listResponse.$metadata, null, 2)}`);
+                        log.info(`List response contents: ${JSON.stringify(listResponse.Contents, null, 2)}`);
+                    } catch (listErr) {
+                        log.error(`List operation failed: ${listErr.message}`);
+                        log.error(`Error name: ${listErr.name}`);
+                        log.error(`Error stack: ${listErr.stack}`);
+                        if (listErr.$metadata) {
+                            log.error(`List error metadata: ${JSON.stringify(listErr.$metadata, null, 2)}`);
+                        }
+                        // Try to get more error details
+                        if (listErr.Code) log.error(`Error code: ${listErr.Code}`);
+                        if (listErr.Region) log.error(`Error region: ${listErr.Region}`);
+                        if (listErr.hostname) log.error(`Error hostname: ${listErr.hostname}`);
+                        throw listErr;
+                    }
+
+                    // Test S3 permissions first with a HEAD request
+                    try {
+                        log.info('Testing HEAD request for permissions check...');
+                        const testKey = `test-permissions-${Date.now()}.txt`;
+                        log.info(`Testing GetObject permissions for key: ${testKey}`);
+                        
+                        // First try to put a test object
+                        const putCommand = new PutObjectCommand({
+                            Bucket: process.env.DUMBDROP_S3_BUCKET,
+                            Key: testKey,
+                            Body: 'test'
+                        });
+                        await s3Client.send(putCommand);
+                        log.info('Successfully put test object');
+
+                        // Then try to get it
+                        const getCommand = new HeadObjectCommand({
+                            Bucket: process.env.DUMBDROP_S3_BUCKET,
+                            Key: testKey
+                        });
+                        log.info(`Sending HeadObject command for key: ${testKey}`);
+                        log.info(`Command parameters: ${JSON.stringify(getCommand.input, null, 2)}`);
+                        
+                        await s3Client.send(getCommand);
+                        log.success('Successfully verified GetObject permissions');
+                    } catch (err) {
+                        if (err.name !== 'NotFound') {
+                            // If error is not NotFound, we might have a permissions issue
+                            log.error(`S3 permissions test failed: ${err.name} - ${err.message}`);
+                            log.error(`Error details: ${JSON.stringify({
+                                code: err.Code,
+                                name: err.name,
+                                message: err.message,
+                                region: err.Region,
+                                hostname: err.hostname,
+                                metadata: err.$metadata,
+                                requestId: err.$metadata?.requestId,
+                                httpStatusCode: err.$metadata?.httpStatusCode
+                            }, null, 2)}`);
+                            throw new Error(`S3 permissions error: ${err.message}`);
+                        }
+                        log.info('HEAD request returned NotFound as expected');
+                    }
+
+                    // Try a simple PUT operation
+                    try {
+                        log.info('Testing PutObject operation...');
+                        const testKey = `test-permissions-${Date.now()}.txt`;
+                        const putCommand = new PutObjectCommand({
+                            Bucket: process.env.DUMBDROP_S3_BUCKET,
+                            Key: testKey,
+                            Body: 'test',
+                            ContentType: 'text/plain'
+                        });
+                        
+                        log.info('Sending PutObject command...');
+                        const putResponse = await s3Client.send(putCommand);
+                        log.success('Successfully put test object');
+                        log.info(`Put response metadata: ${JSON.stringify(putResponse.$metadata, null, 2)}`);
+
+                        // Test multipart upload operations
+                        try {
+                            log.info('Testing CreateMultipartUpload operation...');
+                            const testKey = `test-multipart-${Date.now()}.txt`;
+                            const createCommand = new CreateMultipartUploadCommand({
+                                Bucket: process.env.DUMBDROP_S3_BUCKET,
+                                Key: testKey,
+                                ContentType: 'text/plain'
+                            });
+                            
+                            log.info('Sending CreateMultipartUpload command...');
+                            const { UploadId } = await s3Client.send(createCommand);
+                            log.success(`Successfully initialized multipart upload with ID: ${UploadId}`);
+
+                            // Try to upload a part
+                            log.info('Testing UploadPart operation...');
+                            const partCommand = new UploadPartCommand({
+                                Bucket: process.env.DUMBDROP_S3_BUCKET,
+                                Key: testKey,
+                                UploadId,
+                                PartNumber: 1
+                            });
+
+                            log.info('Sending UploadPart command...');
+                            const partResponse = await s3Client.send(partCommand);
+                            log.success('Successfully uploaded part');
+                            log.info(`Part response metadata: ${JSON.stringify(partResponse.$metadata, null, 2)}`);
+                            const partETag = partResponse.ETag;
+
+                            // Try to complete the multipart upload
+                            log.info('Testing CompleteMultipartUpload operation...');
+                            const completeCommand = new CompleteMultipartUploadCommand({
+                                Bucket: process.env.DUMBDROP_S3_BUCKET,
+                                Key: testKey,
+                                UploadId,
+                                MultipartUpload: {
+                                    Parts: [
+                                        {
+                                            PartNumber: 1,
+                                            ETag: partETag
+                                        }
+                                    ]
+                                }
+                            });
+
+                            log.info('Sending CompleteMultipartUpload command...');
+                            const completeResponse = await s3Client.send(completeCommand);
+                            log.success('Successfully completed multipart upload');
+                            log.info(`Complete response metadata: ${JSON.stringify(completeResponse.$metadata, null, 2)}`);
+                        } catch (multipartErr) {
+                            log.error(`Multipart operations failed: ${multipartErr.message}`);
+                            log.error(`Error name: ${multipartErr.name}`);
+                            log.error(`Error stack: ${multipartErr.stack}`);
+                            if (multipartErr.$metadata) {
+                                log.error(`Multipart error metadata: ${JSON.stringify(multipartErr.$metadata, null, 2)}`);
+                            }
+                            // Try to get more error details
+                            if (multipartErr.Code) log.error(`Error code: ${multipartErr.Code}`);
+                            if (multipartErr.Region) log.error(`Error region: ${multipartErr.Region}`);
+                            if (multipartErr.hostname) log.error(`Error hostname: ${multipartErr.hostname}`);
+                            throw multipartErr;
+                        }
+
+                        log.success('All S3 operations test passed');
+                        return true;
+                    } catch (putErr) {
+                        log.error(`Put operation failed: ${putErr.message}`);
+                        log.error(`Error name: ${putErr.name}`);
+                        log.error(`Error stack: ${putErr.stack}`);
+                        if (putErr.$metadata) {
+                            log.error(`Put error metadata: ${JSON.stringify(putErr.$metadata, null, 2)}`);
+                        }
+                        // Try to get more error details
+                        if (putErr.Code) log.error(`Error code: ${putErr.Code}`);
+                        if (putErr.Region) log.error(`Error region: ${putErr.Region}`);
+                        if (putErr.hostname) log.error(`Error hostname: ${putErr.hostname}`);
+                        throw putErr;
+                    }
+
+                    log.success('Basic S3 operations test passed');
+                    return true;
+                } catch (err) {
+                    const errorDetails = {
+                        code: err.name,
+                        message: err.message,
+                        stack: err.stack,
+                        requestId: err.$metadata?.requestId,
+                        httpStatus: err.$metadata?.httpStatusCode,
+                        endpoint: process.env.DUMBDROP_S3_ENDPOINT,
+                        region: process.env.DUMBDROP_S3_REGION,
+                        bucket: process.env.DUMBDROP_S3_BUCKET
+                    };
+                    log.error(`S3 permissions test failed: ${JSON.stringify(errorDetails, null, 2)}`);
+                    return false;
+                }
+            };
+
+            const testResult = await testOps();
+            if (!testResult) {
+                throw new Error('Failed to verify S3 permissions. Please check your bucket policy and IAM permissions.');
+            }
+
+        } catch (err) {
+            log.error(`Failed to initialize S3 client: ${err.message}`);
+            if (err.$metadata) {
+                log.error(`S3 error metadata: ${JSON.stringify(err.$metadata)}`);
+            }
+            process.exit(1);
+        }
+    })();
 }
 
 // Add validation helper functions
@@ -460,25 +707,38 @@ async function getUniqueS3FolderPath(s3Client, bucket, folderPath, batchId) {
 
 // Update getUniqueS3Key to handle folders with batch context
 async function getUniqueS3Key(s3Client, bucket, key, batchId) {
+    log.info(`getUniqueS3Key: Starting for key ${key}`);
     // Split the path into directory and filename
     const parts = key.split('/');
     const filename = parts.pop();
     let folderPath = parts.join('/');
 
-    // If there's no folder path, just check the file
+    log.info(`getUniqueS3Key: Parsed path - filename: ${filename}, folderPath: ${folderPath}`);
+
+    // If there's no folder path, generate a unique key with timestamp
     if (!folderPath) {
-        return await checkS3ObjectExists(s3Client, bucket, key);
+        log.info('getUniqueS3Key: No folder path, generating unique key');
+        const timestamp = Date.now();
+        const uniqueKey = `${timestamp}-${filename}`;
+        log.info(`getUniqueS3Key: Generated unique key: ${uniqueKey}`);
+        return uniqueKey;
     }
 
     // Get unique folder path if needed (now with batch context)
+    log.info(`getUniqueS3Key: Getting unique folder path for ${folderPath}`);
     const uniqueFolderPath = await getUniqueS3FolderPath(s3Client, bucket, folderPath, batchId);
+    log.info(`getUniqueS3Key: Got unique folder path: ${uniqueFolderPath}`);
     
-    // Return the complete path with the original filename
-    return uniqueFolderPath + '/' + filename;
+    // Return the complete path with timestamp and filename
+    const timestamp = Date.now();
+    const finalPath = `${uniqueFolderPath}/${timestamp}-${filename}`;
+    log.info(`getUniqueS3Key: Final path: ${finalPath}`);
+    return finalPath;
 }
 
 // Helper function to check individual file existence
 async function checkS3ObjectExists(s3Client, bucket, key) {
+    log.info(`checkS3ObjectExists: Checking existence of ${key} in bucket ${bucket}`);
     const ext = path.extname(key);
     const baseName = key.slice(0, -ext.length);
     let counter = 1;
@@ -486,17 +746,29 @@ async function checkS3ObjectExists(s3Client, bucket, key) {
 
     while (true) {
         try {
+            log.info(`checkS3ObjectExists: Trying HEAD request for ${finalKey}`);
             await s3Client.send(new HeadObjectCommand({
                 Bucket: bucket,
                 Key: finalKey
             }));
             // Single file exists, try next number
+            log.info(`checkS3ObjectExists: File exists, trying next number`);
             finalKey = `${baseName} (${counter})${ext}`;
             counter++;
         } catch (err) {
             if (err.name === 'NotFound') {
+                log.info(`checkS3ObjectExists: File does not exist, can use key: ${finalKey}`);
                 return finalKey;
             }
+            log.error(`checkS3ObjectExists: Error checking file existence: ${err.name} - ${err.message}`);
+            log.error(`Error details: ${JSON.stringify({
+                code: err.Code,
+                name: err.name,
+                message: err.message,
+                region: err.Region,
+                hostname: err.hostname,
+                metadata: err.$metadata
+            }, null, 2)}`);
             throw err;
         }
     }
@@ -506,6 +778,8 @@ async function checkS3ObjectExists(s3Client, bucket, key) {
 app.post('/upload/init', initUploadLimiter, async (req, res) => {
     const { filename, fileSize } = req.body;
     let batchId = req.headers['x-batch-id'];
+
+    log.info(`Initializing upload for file: ${filename}, size: ${fileSize}, batchId: ${batchId}`);
 
     if (!filename || typeof fileSize !== 'number') {
         return res.status(400).json({ error: 'Invalid request parameters' });
@@ -533,22 +807,215 @@ app.post('/upload/init', initUploadLimiter, async (req, res) => {
         batchActivity.set(batchId, Date.now());
 
         if (process.env.DUMBDROP_STORAGE === 's3') {
+            try {
+                log.info('Using S3 storage for upload');
+                log.info(`S3 Configuration:
+                    Endpoint: ${process.env.DUMBDROP_S3_ENDPOINT}
+                    Bucket: ${process.env.DUMBDROP_S3_BUCKET}
+                    Region: ${process.env.DUMBDROP_S3_REGION}
+                    Key ID: ${process.env.DUMBDROP_S3_KEY}`);
+
+                // Test S3 permissions first with a HEAD request
+                try {
+                    log.info('Testing HEAD request for permissions check...');
+                    const testKey = `test-permissions-${Date.now()}.txt`;
+                    log.info(`Testing GetObject permissions for key: ${testKey}`);
+                    
+                    // First try to put a test object
+                    const putCommand = new PutObjectCommand({
+                        Bucket: process.env.DUMBDROP_S3_BUCKET,
+                        Key: testKey,
+                        Body: 'test'
+                    });
+                    await s3Client.send(putCommand);
+                    log.info('Successfully put test object');
+
+                    // Then try to get it
+                    const getCommand = new HeadObjectCommand({
+                        Bucket: process.env.DUMBDROP_S3_BUCKET,
+                        Key: testKey
+                    });
+                    log.info(`Sending HeadObject command for key: ${testKey}`);
+                    log.info(`Command parameters: ${JSON.stringify(getCommand.input, null, 2)}`);
+                    
+                    await s3Client.send(getCommand);
+                    log.success('Successfully verified GetObject permissions');
+                } catch (err) {
+                    if (err.name !== 'NotFound') {
+                        // If error is not NotFound, we might have a permissions issue
+                        log.error(`S3 permissions test failed: ${err.name} - ${err.message}`);
+                        log.error(`Error details: ${JSON.stringify({
+                            code: err.Code,
+                            name: err.name,
+                            message: err.message,
+                            region: err.Region,
+                            hostname: err.hostname,
+                            metadata: err.$metadata,
+                            requestId: err.$metadata?.requestId,
+                            httpStatusCode: err.$metadata?.httpStatusCode
+                        }, null, 2)}`);
+                        throw new Error(`S3 permissions error: ${err.message}`);
+                    }
+                    log.info('HEAD request returned NotFound as expected');
+                }
+
             // Get unique S3 key (now with batch context)
+                log.info(`Generating unique key for file: ${safeFilename}`);
             const uniqueKey = await getUniqueS3Key(s3Client, process.env.DUMBDROP_S3_BUCKET, safeFilename, batchId);
-            
+                log.info(`Generated unique key: ${uniqueKey}`);
+                
+                // For large files (> 5MB), use multipart upload
+                if (fileSize > 5 * 1024 * 1024) {
+                    try {
+                        log.info('Initializing multipart upload...');
+                        log.info(`File size: ${fileSize} bytes (${(fileSize / (1024 * 1024)).toFixed(2)} MB)`);
+                        log.info(`Unique key for multipart upload: ${uniqueKey}`);
+                        
+                        // Calculate optimal part size to ensure each part meets minimum size requirements
+                        const minPartSize = 5 * 1024 * 1024; // 5MB minimum
+                        const maxParts = Math.ceil(fileSize / minPartSize);
+                        const partSize = Math.max(minPartSize, Math.ceil(fileSize / maxParts));
+                        const numParts = Math.ceil(fileSize / partSize);
+                        
+                        log.info(`Using part size: ${(partSize / (1024 * 1024)).toFixed(2)}MB for ${numParts} parts`);
+
+                        const createCommand = {
+                            Bucket: process.env.DUMBDROP_S3_BUCKET,
+                            Key: uniqueKey,
+                            ContentType: 'application/octet-stream'
+                        };
+                        log.info(`CreateMultipartUpload command params: ${JSON.stringify(createCommand, null, 2)}`);
+
+                        // Create multipart upload
+                        const createMultipartUpload = new CreateMultipartUploadCommand(createCommand);
+                        log.info('Sending CreateMultipartUpload command...');
+                        const { UploadId } = await s3Client.send(createMultipartUpload);
+                        log.success(`Received UploadId: ${UploadId}`);
+
+                        // Generate presigned URLs for each part
+                        log.info('Generating presigned URLs for parts...');
+                        const partUrls = await Promise.all(
+                            Array.from({ length: numParts }, async (_, index) => {
+                                const partNumber = index + 1;
+                                log.info(`Generating presigned URL for part ${partNumber}/${numParts}`);
+                                
+                                const command = new UploadPartCommand({
+                                    Bucket: process.env.DUMBDROP_S3_BUCKET,
+                                    Key: uniqueKey,
+                                    UploadId,
+                                    PartNumber: partNumber
+                                });
+                                log.info(`UploadPart command params for part ${partNumber}: ${JSON.stringify(command.input, null, 2)}`);
+
+                                try {
+                                    const signedUrl = await getSignedUrl(s3Client, command, {
+                                        expiresIn: 3600,
+                                        // Include Content-Type in signable headers
+                                        signableHeaders: new Set(['host', 'content-type']),
+                                        // Remove any checksum-related parameters
+                                        unhoistableHeaders: new Set(['x-amz-checksum-crc32', 'x-amz-sdk-checksum-algorithm']),
+                                        unsignableHeaders: new Set(['x-amz-checksum-crc32', 'x-amz-sdk-checksum-algorithm'])
+                                    });
+                                    log.success(`Successfully generated presigned URL for part ${partNumber}`);
+                                    log.info(`Part ${partNumber} URL length: ${signedUrl.length} chars`);
+                                    
+                                    return {
+                                        url: signedUrl,
+                                        partNumber: partNumber,
+                                        size: Math.min(partSize, fileSize - (index * partSize))
+                                    };
+                                } catch (presignError) {
+                                    log.error(`Failed to generate presigned URL for part ${partNumber}`);
+                                    log.error(`Presign error: ${presignError.name} - ${presignError.message}`);
+                                    log.error(`Error details: ${JSON.stringify({
+                                        code: presignError.Code,
+                                        name: presignError.name,
+                                        message: presignError.message,
+                                        region: presignError.Region,
+                                        hostname: presignError.hostname,
+                                        metadata: presignError.$metadata,
+                                        requestId: presignError.$metadata?.requestId,
+                                        httpStatusCode: presignError.$metadata?.httpStatusCode
+                                    }, null, 2)}`);
+                                    throw presignError;
+                                }
+                            })
+                        );
+
+                        log.success(`Successfully generated ${partUrls.length} presigned URLs`);
+                        log.info(`First part URL sample (truncated): ${partUrls[0].url.substring(0, 100)}...`);
+                        
+                        res.json({
+                            uploadId,
+                            s3UploadId: UploadId,
+                            parts: partUrls,
+                            key: uniqueKey,
+                            isMultipart: true
+                        });
+                    } catch (multipartError) {
+                        log.error(`Multipart upload initialization failed: ${multipartError.name} - ${multipartError.message}`);
+                        log.error(`Error stack: ${multipartError.stack}`);
+                        if (multipartError.$metadata) {
+                            log.error(`S3 error metadata: ${JSON.stringify(multipartError.$metadata, null, 2)}`);
+                        }
+                        throw multipartError;
+                    }
+                } else {
+                    // For small files, use single PUT
             const command = new PutObjectCommand({
                 Bucket: process.env.DUMBDROP_S3_BUCKET,
                 Key: uniqueKey,
-                ContentLength: fileSize,
                 ContentType: 'application/octet-stream'
-            });
+                        // Remove ACL for better compatibility
+                    });
 
-            const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+                    log.info('Generating presigned URL for single PUT...');
+                    const uploadUrl = await getSignedUrl(s3Client, command, { 
+                        expiresIn: 3600,
+                        signableHeaders: new Set(['host'])
+                    });
+                    log.info(`Generated presigned URL: ${uploadUrl}`);
+
+                    log.info(`Generated presigned URL for ${uniqueKey}`);
+                    
             res.json({ 
                 uploadId, 
                 uploadUrl,
-                key: uniqueKey
-            });
+                        key: uniqueKey,
+                        isMultipart: false
+                    });
+                }
+            } catch (s3Error) {
+                // Enhanced error logging with specific error types
+                log.error(`S3 operation failed: ${s3Error.name} - ${s3Error.message}`);
+                if (s3Error.$metadata) {
+                    log.error(`S3 error metadata: ${JSON.stringify(s3Error.$metadata)}`);
+                }
+                
+                let errorMessage = 'Failed to initialize S3 upload';
+                let statusCode = 500;
+                
+                // Map common S3 errors to user-friendly messages
+                if (s3Error.name === 'NoSuchBucket') {
+                    errorMessage = 'The specified S3 bucket does not exist';
+                    statusCode = 400;
+                } else if (s3Error.$metadata?.httpStatusCode === 403) {
+                    errorMessage = 'Permission denied. Please check S3 bucket permissions';
+                    statusCode = 403;
+                } else if (s3Error.name === 'InvalidAccessKeyId') {
+                    errorMessage = 'Invalid S3 credentials';
+                    statusCode = 401;
+                }
+                
+                return res.status(statusCode).json({
+                    error: errorMessage,
+                    details: {
+                        message: s3Error.message,
+                        code: s3Error.code || s3Error.name,
+                        requestId: s3Error.$metadata?.requestId
+                    }
+                });
+            }
         } else {
             // Local storage logic
             const filePath = path.join(uploadDir, safeFilename);
@@ -649,6 +1116,55 @@ app.post('/upload/cancel/:uploadId', (req, res) => {
     }
 
     res.json({ message: 'Upload cancelled' });
+});
+
+// Add this route after the other upload routes
+app.post('/upload/complete/:uploadId', async (req, res) => {
+    const { key, uploadId: s3UploadId, parts } = req.body;
+
+    log.info(`Completing multipart upload for key: ${key}`);
+    log.info(`Upload ID: ${s3UploadId}`);
+    log.info(`Number of parts to complete: ${parts.length}`);
+    log.info(`Parts data: ${JSON.stringify(parts, null, 2)}`);
+
+    if (!key || !s3UploadId || !parts || !Array.isArray(parts)) {
+        log.error('Invalid completion parameters received');
+        log.error(`key: ${key}, uploadId: ${s3UploadId}, parts: ${JSON.stringify(parts)}`);
+        return res.status(400).json({ error: 'Invalid completion parameters' });
+    }
+
+    try {
+        const command = new CompleteMultipartUploadCommand({
+            Bucket: process.env.DUMBDROP_S3_BUCKET,
+            Key: key,
+            UploadId: s3UploadId,
+            MultipartUpload: {
+                Parts: parts
+            }
+        });
+
+        log.info(`Sending CompleteMultipartUpload command with params: ${JSON.stringify(command.input, null, 2)}`);
+        
+        const result = await s3Client.send(command);
+        log.success(`Completed multipart upload for ${key}`);
+        log.info(`Completion response: ${JSON.stringify(result, null, 2)}`);
+        
+        res.json({ success: true });
+    } catch (err) {
+        log.error(`Failed to complete multipart upload: ${err.name} - ${err.message}`);
+        log.error(`Error stack: ${err.stack}`);
+        if (err.$metadata) {
+            log.error(`Error metadata: ${JSON.stringify(err.$metadata, null, 2)}`);
+        }
+        res.status(500).json({ 
+            error: 'Failed to complete multipart upload',
+            details: {
+                message: err.message,
+                code: err.code || err.name,
+                requestId: err.$metadata?.requestId
+            }
+        });
+    }
 });
 
 // Error handling middleware

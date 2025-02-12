@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{SITE_TITLE}} - Simple File Upload</title>
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
     <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
@@ -94,6 +95,7 @@
                 this.waitingMessageInterval = null;
                 this.dotsCount = 1;
                 this.dotsIncreasing = true;
+                this.partETags = [];
             }
 
             cycleWaitingMessage() {
@@ -202,33 +204,40 @@
             async start() {
                 try {
                     this.startTime = Date.now();
-                    // Initialize speed update timer
                     this.speedUpdateTimer = setInterval(() => {
                         if (this.bytesReceived > 0) {
                             this.calculateSpeed(this.bytesReceived);
                         }
                     }, 1000);
 
-                    // Add progress update timer for more frequent UI updates
                     this.progressUpdateTimer = setInterval(() => {
                         if (this.bytesReceived > 0) {
                             const progress = (this.bytesReceived / this.file.size) * 100;
                             this.updateProgress(progress);
                         }
-                    }, 200); // Update every 200ms
+                    }, 200);
                     
                     await this.initUpload();
                     await this.uploadChunks();
                     
-                    // Clear the timers when upload is complete
                     this.clearTimers();
                     return true;
                 } catch (error) {
                     this.clearTimers();
                     console.error('Upload failed:', error);
                     if (this.progressElement) {
-                        this.progressElement.infoSpan.textContent = `Error: ${error.message}`;
+                        const errorMessage = error.message || 'Unknown error occurred';
+                        this.progressElement.infoSpan.textContent = `Error: ${errorMessage}`;
                         this.progressElement.infoSpan.style.color = 'var(--danger-color)';
+                        
+                        // Add retry button for permission errors
+                        if (error.message.includes('permission denied') || error.message.includes('authentication failed')) {
+                            const retryButton = document.createElement('button');
+                            retryButton.textContent = 'Retry Upload';
+                            retryButton.className = 'retry-button';
+                            retryButton.onclick = () => this.start();
+                            this.progressElement.infoSpan.appendChild(retryButton);
+                        }
                     }
                     this.stopWaitingMessage();
                     return false;
@@ -256,22 +265,32 @@
                     const error = await response.json();
                     if (response.status === 413) {
                         throw new Error(`File too large. Maximum size is ${error.limitInMB}MB`);
+                    } else if (response.status === 403) {
+                        throw new Error(`S3 permission denied: ${error.error}. Please check your bucket permissions.`);
+                    } else if (response.status === 401) {
+                        throw new Error(`S3 authentication failed: ${error.error}. Please check your credentials.`);
+                    } else if (response.status === 400) {
+                        throw new Error(`S3 configuration error: ${error.error}`);
                     }
-                    throw new Error('Failed to initialize upload');
+                    throw new Error(error.error || 'Failed to initialize upload');
                 }
+
                 const data = await response.json();
                 this.uploadId = data.uploadId;
                 this.uploadUrl = data.uploadUrl;
-                this.filePath = data.filePath;
+                this.key = data.key;
+                this.s3UploadId = data.s3UploadId;
+                this.parts = data.parts;
+                this.isMultipart = data.isMultipart;
             }
 
             async uploadChunks() {
                 this.createProgressElement();
 
                 while (this.position < this.file.size) {
-                    const chunk = await this.readChunk();
+                    const chunkData = await this.readChunk();
                     try {
-                        await this.uploadChunk(chunk);
+                        await this.uploadChunk(chunkData);
                         this.retries = 0;
                     } catch (error) {
                         if (this.retries >= MAX_RETRIES) throw error;
@@ -284,24 +303,158 @@
 
             async readChunk() {
                 const start = this.position;
-                const end = Math.min(this.position + CHUNK_SIZE, this.file.size);
+                let partIndex = 0;
+                let partSize = this.file.size;
+                
+                if (this.isMultipart && this.parts) {
+                    partIndex = Math.floor(start / this.parts[0].size);
+                    if (partIndex >= this.parts.length) {
+                        throw new Error('Invalid chunk position');
+                    }
+                    partSize = this.parts[partIndex].size;
+                }
+                
+                const end = Math.min(start + partSize, this.file.size);
                 const blob = this.file.slice(start, end);
                 this.position = end;
-                return await blob.arrayBuffer();
+                const chunk = await blob.arrayBuffer();
+                
+                return { chunk, partIndex };
             }
 
-            async uploadChunk(chunk) {
-                const response = await fetch(this.uploadUrl || this.filePath, {
-                    method: this.uploadUrl ? 'PUT' : 'POST',
+            async uploadChunk(chunkData) {
+                let response;
+                let retryCount = 0;
+                const maxRetries = 3;
+                const retryDelay = 1000; // 1 second
+
+                while (retryCount <= maxRetries) {
+                    try {
+                        if (this.isMultipart && this.parts) {
+                            const { chunk, partIndex } = chunkData;
+                            const part = this.parts[partIndex];
+
+                            if (!part) {
+                                throw new Error(`Invalid part number: ${partIndex}`);
+                            }
+
+                            console.log(`Uploading part ${partIndex + 1}/${this.parts.length}, size: ${chunk.byteLength}, position: ${this.position - chunk.byteLength}`);
+
+                            // Create a blob with the correct content type
+                            const blob = new Blob([chunk], { type: 'application/octet-stream' });
+
+                            response = await fetch(part.url, {
+                                method: 'PUT',
+                                headers: {
+                                    'Content-Type': 'application/octet-stream'
+                                },
+                                body: blob,
+                                mode: 'cors',
+                                credentials: 'omit'
+                            });
+
+                            if (!response.ok) {
+                                const errorText = await response.text().catch(() => 'No error details available');
+                                throw new Error(`HTTP ${response.status}: ${errorText}`);
+                            }
+
+                            // Get the ETag from response headers
+                            let etag = response.headers.get('etag') || response.headers.get('ETag');
+                            
+                            if (!etag) {
+                                // Try to get ETag from response URL
+                                const responseUrl = response.url;
+                                const urlParams = new URLSearchParams(responseUrl.split('?')[1]);
+                                etag = urlParams.get('etag');
+                                
+                                if (!etag) {
+                                    // Try to get ETag from response body
+                                    const text = await response.text();
+                                    const match = text.match(/"ETag"\s*:\s*"([^"]+)"/i) || text.match(/<ETag>([^<]+)<\/ETag>/i);
+                                    if (match) {
+                                        etag = match[1];
+                                    }
+                                }
+                            }
+
+                            if (!etag) {
+                                throw new Error('Missing ETag in response');
+                            }
+
+                            // Store the ETag for completing the multipart upload
+                            this.partETags[partIndex] = {
+                                PartNumber: part.partNumber,
+                                ETag: etag.replace(/['"]/g, '') // Remove quotes from ETag
+                            };
+                        } else if (this.uploadUrl) {
+                            // Single PUT upload for S3
+                            const { chunk } = chunkData;
+                            const blob = new Blob([chunk], { type: 'application/octet-stream' });
+                            
+                            response = await fetch(this.uploadUrl, {
+                                method: 'PUT',
+                                headers: {
+                                    'Content-Type': 'application/octet-stream'
+                                },
+                                body: blob,
+                                mode: 'cors',
+                                credentials: 'omit'
+                            });
+                        } else {
+                            // Local storage upload
+                            const { chunk } = chunkData;
+                            response = await fetch(`/upload/chunk/${this.uploadId}`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/octet-stream',
+                                    'X-Batch-ID': this.batchId
+                                },
+                                body: chunk
+                            });
+                        }
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+
+                        // Update progress
+                        const { chunk } = chunkData;
+                        this.bytesReceived += chunk.byteLength;
+                        this.updateProgress((this.bytesReceived / this.file.size) * 100);
+
+                        // If this was the last chunk and we're doing multipart upload, complete it
+                        if (this.isMultipart && this.bytesReceived >= this.file.size) {
+                            await this.completeMultipartUpload();
+                        }
+
+                        break; // Success, exit retry loop
+                    } catch (error) {
+                        retryCount++;
+                        if (retryCount > maxRetries) {
+                            throw new Error(`Upload failed after ${maxRetries} retries: ${error.message}`);
+                        }
+                        console.warn(`Chunk upload failed, retrying (${retryCount}/${maxRetries}): ${error.message}`);
+                        await new Promise(resolve => setTimeout(resolve, retryDelay * retryCount));
+                    }
+                }
+            }
+
+            async completeMultipartUpload() {
+                const response = await fetch(`/upload/complete/${this.uploadId}`, {
+                    method: 'POST',
                     headers: {
-                        'Content-Type': 'application/octet-stream'
+                        'Content-Type': 'application/json'
                     },
-                    body: chunk
+                    body: JSON.stringify({
+                        key: this.key,
+                        uploadId: this.s3UploadId,
+                        parts: this.partETags.filter(Boolean) // Remove any empty slots
+                    })
                 });
 
-                if (!response.ok) throw new Error('Chunk upload failed');
-                this.bytesReceived += chunk.byteLength;
-                this.updateProgress((this.bytesReceived / this.file.size) * 100);
+                if (!response.ok) {
+                    throw new Error('Failed to complete multipart upload');
+                }
             }
 
             createProgressElement() {
