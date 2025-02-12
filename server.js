@@ -11,7 +11,7 @@ const execAsync = util.promisify(exec);
 require('dotenv').config();
 const { S3Client } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-const { PutObjectCommand } = require('@aws-sdk/client-s3');
+const { PutObjectCommand, HeadObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 
 // Rate limiting setup
 const rateLimit = require('express-rate-limit');
@@ -294,6 +294,12 @@ setInterval(() => {
                     folderMappings.delete(key);
                 }
             }
+            // Clean up S3 folder mappings for this batch
+            for (const key of s3FolderMappings.keys()) {
+                if (key.endsWith(`-${batchId}`)) {
+                    s3FolderMappings.delete(key);
+                }
+            }
             batchActivity.delete(batchId);
             log.info(`Cleaned up folder mappings for inactive batch: ${batchId}`);
         }
@@ -414,6 +420,88 @@ function sanitizeFilename(filename) {
     return sanitizedParts.join('/');
 }
 
+// Add S3 folder mapping to maintain folder consistency within batches
+const s3FolderMappings = new Map();
+
+// Add S3 folder handling function
+async function getUniqueS3FolderPath(s3Client, bucket, folderPath, batchId) {
+    // Check if we already have a mapping for this folder in this batch
+    const mappingKey = `${folderPath}-${batchId}`;
+    if (s3FolderMappings.has(mappingKey)) {
+        return s3FolderMappings.get(mappingKey);
+    }
+
+    let counter = 1;
+    let finalPath = folderPath;
+
+    while (true) {
+        try {
+            // Check if any objects exist with this folder prefix
+            const response = await s3Client.send(new ListObjectsV2Command({
+                Bucket: bucket,
+                Prefix: finalPath + '/',
+                MaxKeys: 1
+            }));
+
+            if (!response.Contents || response.Contents.length === 0) {
+                // No objects with this prefix exist, we can use this folder path
+                s3FolderMappings.set(mappingKey, finalPath);
+                return finalPath;
+            }
+
+            // Folder exists, try next number
+            finalPath = `${folderPath} (${counter})`;
+            counter++;
+        } catch (err) {
+            throw err;
+        }
+    }
+}
+
+// Update getUniqueS3Key to handle folders with batch context
+async function getUniqueS3Key(s3Client, bucket, key, batchId) {
+    // Split the path into directory and filename
+    const parts = key.split('/');
+    const filename = parts.pop();
+    let folderPath = parts.join('/');
+
+    // If there's no folder path, just check the file
+    if (!folderPath) {
+        return await checkS3ObjectExists(s3Client, bucket, key);
+    }
+
+    // Get unique folder path if needed (now with batch context)
+    const uniqueFolderPath = await getUniqueS3FolderPath(s3Client, bucket, folderPath, batchId);
+    
+    // Return the complete path with the original filename
+    return uniqueFolderPath + '/' + filename;
+}
+
+// Helper function to check individual file existence
+async function checkS3ObjectExists(s3Client, bucket, key) {
+    const ext = path.extname(key);
+    const baseName = key.slice(0, -ext.length);
+    let counter = 1;
+    let finalKey = key;
+
+    while (true) {
+        try {
+            await s3Client.send(new HeadObjectCommand({
+                Bucket: bucket,
+                Key: finalKey
+            }));
+            // Single file exists, try next number
+            finalKey = `${baseName} (${counter})${ext}`;
+            counter++;
+        } catch (err) {
+            if (err.name === 'NotFound') {
+                return finalKey;
+            }
+            throw err;
+        }
+    }
+}
+
 // Routes
 app.post('/upload/init', initUploadLimiter, async (req, res) => {
     const { filename, fileSize } = req.body;
@@ -445,15 +533,22 @@ app.post('/upload/init', initUploadLimiter, async (req, res) => {
         batchActivity.set(batchId, Date.now());
 
         if (process.env.DUMBDROP_STORAGE === 's3') {
+            // Get unique S3 key (now with batch context)
+            const uniqueKey = await getUniqueS3Key(s3Client, process.env.DUMBDROP_S3_BUCKET, safeFilename, batchId);
+            
             const command = new PutObjectCommand({
                 Bucket: process.env.DUMBDROP_S3_BUCKET,
-                Key: safeFilename,
+                Key: uniqueKey,
                 ContentLength: fileSize,
                 ContentType: 'application/octet-stream'
             });
 
             const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-            res.json({ uploadId, uploadUrl });
+            res.json({ 
+                uploadId, 
+                uploadUrl,
+                key: uniqueKey
+            });
         } else {
             // Local storage logic
             const filePath = path.join(uploadDir, safeFilename);
