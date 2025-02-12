@@ -381,10 +381,13 @@
                                 throw new Error('Missing ETag in response');
                             }
 
+                            // Clean the ETag - remove quotes and weak validator prefix
+                            etag = etag.replace(/^W\//, '').replace(/['"]/g, '');
+
                             // Store the ETag for completing the multipart upload
                             this.partETags[partIndex] = {
                                 PartNumber: part.partNumber,
-                                ETag: etag.replace(/['"]/g, '') // Remove quotes from ETag
+                                ETag: etag
                             };
                         } else if (this.uploadUrl) {
                             // Single PUT upload for S3
