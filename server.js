@@ -371,16 +371,83 @@ if (process.env.DUMBDROP_STORAGE === 's3') {
     });
 }
 
+// Add validation helper functions
+function validateFileSize(size) {
+    if (size > maxFileSize) {
+        const error = new Error('File too large');
+        error.code = 'FILE_TOO_LARGE';
+        error.details = {
+            limit: maxFileSize,
+            limitInMB: maxFileSize / (1024 * 1024)
+        };
+        throw error;
+    }
+}
+
+function validateFileExtension(filename) {
+    const allowedExtensions = process.env.ALLOWED_EXTENSIONS ? 
+        process.env.ALLOWED_EXTENSIONS.split(',').map(ext => ext.trim().toLowerCase()) : 
+        null;
+    
+    if (allowedExtensions) {
+        const fileExt = path.extname(filename).toLowerCase();
+        if (!allowedExtensions.includes(fileExt)) {
+            const error = new Error('File type not allowed');
+            error.code = 'INVALID_FILE_TYPE';
+            error.details = { allowedExtensions };
+            throw error;
+        }
+    }
+}
+
+function sanitizeFilename(filename) {
+    // Normalize the path and remove any path traversal attempts
+    const normalizedPath = path.normalize(filename).replace(/^(\.\.(\/|\\|$))+/, '');
+    
+    // Split into directory path and filename
+    const parts = normalizedPath.split(/[/\\]/);
+    const sanitizedParts = parts.map(part => {
+        // Remove any dangerous characters from each part
+        return part.replace(/[<>:"|?*\x00-\x1F]/g, '_');
+    });
+    
+    return sanitizedParts.join('/');
+}
+
 // Routes
-app.post('/upload/init', async (req, res) => {
+app.post('/upload/init', initUploadLimiter, async (req, res) => {
     const { filename, fileSize } = req.body;
-    const uploadId = crypto.randomBytes(16).toString('hex');
+    let batchId = req.headers['x-batch-id'];
+
+    if (!filename || typeof fileSize !== 'number') {
+        return res.status(400).json({ error: 'Invalid request parameters' });
+    }
 
     try {
+        // Validate file size and extension
+        validateFileSize(fileSize);
+        validateFileExtension(filename);
+
+        // Sanitize the filename
+        const safeFilename = sanitizeFilename(filename);
+        const uploadId = crypto.randomBytes(16).toString('hex');
+
+        // For single file uploads without a batch ID, generate one
+        if (!batchId) {
+            const timestamp = Date.now();
+            const randomStr = crypto.randomBytes(4).toString('hex').substring(0, 9);
+            batchId = `${timestamp}-${randomStr}`;
+        } else if (!isValidBatchId(batchId)) {
+            return res.status(400).json({ error: 'Invalid batch ID format' });
+        }
+
+        // Always update batch activity timestamp for any upload
+        batchActivity.set(batchId, Date.now());
+
         if (process.env.DUMBDROP_STORAGE === 's3') {
             const command = new PutObjectCommand({
                 Bucket: process.env.DUMBDROP_S3_BUCKET,
-                Key: filename,
+                Key: safeFilename,
                 ContentLength: fileSize,
                 ContentType: 'application/octet-stream'
             });
@@ -389,12 +456,40 @@ app.post('/upload/init', async (req, res) => {
             res.json({ uploadId, uploadUrl });
         } else {
             // Local storage logic
-            const filePath = path.join(__dirname, 'uploads', filename);
+            const filePath = path.join(uploadDir, safeFilename);
+            
+            // Ensure parent directories exist
             await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
-            res.json({ uploadId, filePath });
+            
+            // Get unique file path to prevent overwrites
+            const { path: uniquePath, handle } = await getUniqueFilePath(filePath);
+            
+            // Create upload entry
+            uploads.set(uploadId, {
+                safeFilename: path.relative(uploadDir, uniquePath),
+                filePath: uniquePath,
+                fileSize,
+                bytesReceived: 0,
+                writeStream: handle.createWriteStream()
+            });
+
+            res.json({ uploadId, filePath: uniquePath });
         }
     } catch (err) {
         log.error(`Failed to initialize upload: ${err.message}`);
+        
+        if (err.code === 'FILE_TOO_LARGE') {
+            return res.status(413).json({
+                error: 'File too large',
+                ...err.details
+            });
+        } else if (err.code === 'INVALID_FILE_TYPE') {
+            return res.status(400).json({
+                error: 'File type not allowed',
+                ...err.details
+            });
+        }
+        
         res.status(500).json({ error: 'Failed to initialize upload' });
     }
 });
