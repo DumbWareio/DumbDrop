@@ -1,6 +1,4 @@
 const request = require('supertest');
-const path = require('path');
-const fs = require('fs').promises;
 const { app } = require('../../src/app');
 
 // Mock multer before requiring the app
@@ -81,7 +79,7 @@ describe('File Upload Functionality', () => {
       .post('/api/upload/init')
       .send({
         filename: 'large-file.txt',
-        fileSize: 1024 * 1024 * 20 // 20MB
+        fileSize: 1.5 * 1024 * 1024 // 1.5MB (exceeds 1MB limit)
       });
 
     expect(response.status).toBe(413);

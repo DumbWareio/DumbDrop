@@ -84,11 +84,14 @@ async function getUniqueFilePath(filePath) {
   const baseName = path.basename(filePath, ext);
   let counter = 1;
   let finalPath = filePath;
+  let fileHandle = null;
 
-  while (true) {
+  // Try until we find a unique path or hit an error
+  let pathFound = false;
+  while (!pathFound) {
     try {
-      const fileHandle = await fs.promises.open(finalPath, 'wx');
-      return { path: finalPath, handle: fileHandle };
+      fileHandle = await fs.promises.open(finalPath, 'wx');
+      pathFound = true;
     } catch (err) {
       if (err.code === 'EEXIST') {
         finalPath = path.join(dir, `${baseName} (${counter})${ext}`);
@@ -98,6 +101,7 @@ async function getUniqueFilePath(filePath) {
       }
     }
   }
+  return { path: finalPath, handle: fileHandle };
 }
 
 /**
@@ -108,23 +112,22 @@ async function getUniqueFilePath(filePath) {
 async function getUniqueFolderPath(folderPath) {
   let counter = 1;
   let finalPath = folderPath;
+  let pathFound = false;
 
-  while (true) {
+  while (!pathFound) {
     try {
       await fs.promises.mkdir(finalPath, { recursive: false });
-      return finalPath;
+      pathFound = true;
     } catch (err) {
       if (err.code === 'EEXIST') {
         finalPath = `${folderPath} (${counter})`;
         counter++;
-      } else if (err.code === 'ENOENT') {
-        await fs.promises.mkdir(path.dirname(finalPath), { recursive: true });
-        continue;
       } else {
         throw err;
       }
     }
   }
+  return finalPath;
 }
 
 module.exports = {

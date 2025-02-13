@@ -61,12 +61,15 @@ router.post('/init', async (req, res) => {
     }
 
     // Validate file size
-    if (size > config.maxFileSize) {
-      logger.warn(`File size ${size} bytes exceeds limit of ${config.maxFileSize} bytes`);
+    const maxSizeInBytes = config.maxFileSize;
+    if (size > maxSizeInBytes) {
+      const message = `File size ${size} bytes exceeds limit of ${maxSizeInBytes} bytes`;
+      logger.warn(message);
       return res.status(413).json({ 
         error: 'File too large',
-        limit: config.maxFileSize,
-        limitInMB: Math.floor(config.maxFileSize / (1024 * 1024))
+        message,
+        limit: maxSizeInBytes,
+        limitInMB: Math.floor(maxSizeInBytes / (1024 * 1024))
       });
     }
 
@@ -178,7 +181,12 @@ router.post('/chunk/:uploadId', express.raw({
     }
 
     // Write chunk
-    upload.writeStream.write(Buffer.from(req.body));
+    await new Promise((resolve, reject) => {
+      upload.writeStream.write(Buffer.from(req.body), (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
     upload.bytesReceived += chunkSize;
 
     // Calculate progress, ensuring it doesn't exceed 100%
@@ -189,20 +197,25 @@ router.post('/chunk/:uploadId', express.raw({
     
     logger.info(`Received chunk for ${upload.safeFilename}: ${progress}%`);
 
-    res.json({ 
-      bytesReceived: upload.bytesReceived,
-      progress
-    });
-
     // Check if upload is complete
     if (upload.bytesReceived >= upload.fileSize) {
-      upload.writeStream.end();
+      await new Promise((resolve, reject) => {
+        upload.writeStream.end((err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
       uploads.delete(uploadId);
       logger.success(`Upload completed: ${upload.safeFilename}`);
       
       // Send notification
       await sendNotification(upload.safeFilename, upload.fileSize, config);
     }
+
+    res.json({ 
+      bytesReceived: upload.bytesReceived,
+      progress
+    });
   } catch (err) {
     logger.error(`Chunk upload failed: ${err.message}`);
     res.status(500).json({ error: 'Failed to process chunk' });
@@ -210,15 +223,17 @@ router.post('/chunk/:uploadId', express.raw({
 });
 
 // Cancel upload
-router.post('/cancel/:uploadId', (req, res) => {
+router.post('/cancel/:uploadId', async (req, res) => {
   const { uploadId } = req.params;
   const upload = uploads.get(uploadId);
 
   if (upload) {
     upload.writeStream.end();
-    fs.unlink(upload.filePath, (err) => {
-      if (err) logger.error(`Failed to delete incomplete upload: ${err.message}`);
-    });
+    try {
+      await fs.promises.unlink(upload.filePath);
+    } catch (err) {
+      logger.error(`Failed to delete incomplete upload: ${err.message}`);
+    }
     uploads.delete(uploadId);
     logger.info(`Upload cancelled: ${upload.safeFilename}`);
   }

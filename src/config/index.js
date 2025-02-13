@@ -1,5 +1,6 @@
 require('dotenv').config();
 const { validatePin } = require('../utils/security');
+const logger = require('../utils/logger');
 
 /**
  * Application configuration
@@ -12,7 +13,13 @@ const config = {
   
   // Upload settings
   uploadDir: process.env.UPLOAD_DIR || './uploads',
-  maxFileSize: parseInt(process.env.MAX_FILE_SIZE || '1024') * 1024 * 1024, // Convert MB to bytes
+  maxFileSize: (() => {
+    const sizeInMB = parseInt(process.env.MAX_FILE_SIZE || '1024', 10);
+    if (isNaN(sizeInMB) || sizeInMB <= 0) {
+      throw new Error('MAX_FILE_SIZE must be a positive number');
+    }
+    return sizeInMB * 1024 * 1024; // Convert MB to bytes
+  })(),
   autoUpload: process.env.AUTO_UPLOAD === 'true',
   
   // Security
@@ -42,7 +49,7 @@ function validateConfig() {
   
   if (config.nodeEnv === 'production') {
     if (!config.appriseUrl) {
-      console.warn('Warning: APPRISE_URL not set in production environment');
+      logger.info('Notifications disabled - No Configuration');
     }
   }
   

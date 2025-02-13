@@ -24,7 +24,9 @@ case "$1" in
             print_message "No .env.dev found. Creating from example..."
             cp .env.dev.example .env.dev
         fi
-        docker compose -f docker-compose.dev.yml up --build
+        docker compose -f docker-compose.dev.yml up -d --build
+        print_message "Container logs:"
+        docker compose -f docker-compose.dev.yml logs
         ;;
     "down")
         print_message "Stopping DumbDrop development environment..."
@@ -51,7 +53,7 @@ case "$1" in
         ;;
     "test")
         print_message "Running tests..."
-        docker compose -f docker-compose.dev.yml exec app npm test
+        docker compose -f docker-compose.dev.yml exec app npm test --detectOpenHandles
         ;;
     "lint")
         print_message "Running linter..."

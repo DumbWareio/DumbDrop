@@ -35,20 +35,24 @@ async function startServer() {
       logger.info('SIGTERM received. Shutting down gracefully...');
       server.close(() => {
         logger.info('Server closed');
-        process.exit(0);
+        // Allow natural process termination instead of forcing exit
+        process.exitCode = 0;
       });
     });
 
     return server;
   } catch (error) {
     logger.error('Failed to start server:', error);
-    process.exit(1);
+    throw error; // Let the caller handle the error
   }
 }
 
 // Only start the server if this file is run directly
 if (require.main === module) {
-  startServer();
+  startServer().catch(err => {
+    logger.error('Server startup failed:', err);
+    process.exitCode = 1;
+  });
 }
 
 module.exports = { app, startServer }; 

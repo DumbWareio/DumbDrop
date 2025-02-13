@@ -23,5 +23,13 @@
     "node/prefer-global/url": ["error", "always"],
     "node/prefer-promises/dns": "error",
     "node/prefer-promises/fs": "error"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["**/__tests__/**/*.[jt]s?(x)", "**/?(*.)+(spec|test).[jt]s?(x)"],
+      "rules": {
+        "node/no-unpublished-require": "off"
+      }
+    }
+  ]
 } 

@@ -1,10 +1,10 @@
 {
   "name": "dumbdrop",
   "version": "1.0.0",
-  "main": "server.js",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon --legacy-watch server.js",
+    "start": "node src/server.js",
+    "dev": "nodemon --legacy-watch src/server.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "lint": "eslint .",
@@ -33,7 +33,7 @@
     "jest": "^29.7.0",
     "nodemon": "^3.1.9",
     "prettier": "^3.2.5",
-    "supertest": "^6.3.4",
+    "supertest": "^6.3.3",
     "svg2img": "^1.0.0-beta.2"
   },
   "engines": {

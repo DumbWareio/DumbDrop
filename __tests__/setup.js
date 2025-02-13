@@ -11,39 +11,42 @@ global.console = {
   debug: jest.fn(),
 };
 
-// Test configuration
-process.env.NODE_ENV = 'test';
-process.env.PORT = 3001;
-process.env.UPLOAD_DIR = path.join(__dirname, '../test_uploads');
-process.env.MAX_FILE_SIZE = '1'; // 1MB in test environment
-process.env.DUMBDROP_TITLE = 'DumbDrop-Test';
-
 let server;
+let cleanupTimer;
 
 // Initialize app before all tests
 beforeAll(async () => {
   try {
     // Create test upload directory
-    await fs.mkdir(process.env.UPLOAD_DIR, { recursive: true });
+    await fs.mkdir(path.join(__dirname, '../test_uploads'), { recursive: true });
     
     // Initialize the app
     await initialize();
     
-    // Start the server
-    return new Promise((resolve) => {
-      server = app.listen(process.env.PORT, () => {
-        resolve();
-      });
-    });
+    // Start server
+    server = app.listen(process.env.PORT);
   } catch (err) {
     console.error('Test setup failed:', err);
     throw err;
   }
 });
 
-// Reset mocks before each test
-beforeEach(() => {
+// Reset environment before each test
+beforeEach(async () => {
+  // Reset mocks
   jest.clearAllMocks();
+  
+  // Reset environment variables
+  process.env.NODE_ENV = 'test';
+  process.env.PORT = '3001';
+  process.env.UPLOAD_DIR = path.join(__dirname, '../test_uploads');
+  process.env.MAX_FILE_SIZE = '1'; // 1MB
+  process.env.DUMBDROP_TITLE = 'DumbDrop-Test';
+  
+  // Clear any existing cleanup timers
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+  }
 });
 
 // Clean up test files after each test
@@ -64,14 +67,19 @@ afterEach(async () => {
 
 // Cleanup after all tests
 afterAll(async () => {
-  // Close server
-  await new Promise((resolve) => {
-    server?.close(resolve);
-  });
+  // Clear any cleanup timers
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+  }
   
-  // Remove test directory using fs.rm instead of deprecated fs.rmdir
+  // Close server
+  if (server) {
+    await new Promise((resolve) => server.close(resolve));
+  }
+  
+  // Remove test directory
   try {
-    await fs.rm(process.env.UPLOAD_DIR, { recursive: true, force: true });
+    await fs.rm(path.join(__dirname, '../test_uploads'), { recursive: true, force: true });
   } catch (err) {
     if (err.code !== 'ENOENT') {
       console.error('Failed to remove test directory:', err);
