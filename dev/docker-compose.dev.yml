@@ -1,25 +1,25 @@
-version: '3.8'
-
 services:
-  dumbdrop:
+  app:
     build:
       context: ..
       dockerfile: Dockerfile
+      target: development
+    volumes:
+      - ..:/usr/src/app
+      - /usr/src/app/node_modules
     ports:
       - "3000:3000"
-    volumes:
-      - ../:/app
-      - /app/node_modules
-      - ../local_uploads:/app/uploads
     environment:
-      NODE_ENV: development
-      DUMBDROP_TITLE: DumbDrop-Dev
-      MAX_FILE_SIZE: 1024
-      DUMBDROP_PIN: 123456
-      APPRISE_MESSAGE: "[DEV] New file uploaded - {filename} ({size}), Storage used {storage}"
-      APPRISE_SIZE_UNIT: auto
-    # Enable container restart during development
+      - NODE_ENV=development
+      - PORT=3000
+      - MAX_FILE_SIZE=1024
+      - AUTO_UPLOAD=false
+      - DUMBDROP_TITLE=DumbDrop-Dev
+    command: npm run dev
     restart: unless-stopped
+    # Enable container debugging if needed
+    # stdin_open: true
+    # tty: true
     # Add development labels
     labels:
       - "dev.dumbware.environment=development" 

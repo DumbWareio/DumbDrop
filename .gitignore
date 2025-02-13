@@ -151,3 +151,51 @@ dev/*
 !dev/docker-compose.dev.yml
 !dev/dev.sh
 !dev/README.md
+
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+.nyc_output
+
+# Production
+/build
+/dist
+
+# Development
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+dev/.env.dev
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Application specific
+/uploads/*
+/local_uploads/*
+!uploads/.gitkeep
+!local_uploads/.gitkeep
+
+# Misc
+*.log
+.env.*
+!.env.example
+!dev/.env.dev.example

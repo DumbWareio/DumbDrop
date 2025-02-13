@@ -1,37 +1,74 @@
 #!/bin/bash
 
-# Simple development helper script because we're too dumb for complexity
+# Set script to exit on error
+set -e
+
+# Colors for pretty output
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+# Helper function for pretty printing
+print_message() {
+    echo -e "${BLUE}🔧 ${1}${NC}"
+}
+
+# Ensure we're in the right directory
+cd "$(dirname "$0")"
 
 case "$1" in
     "up")
-        echo "🚀 Starting DumbDrop in development mode..."
+        print_message "Starting DumbDrop in development mode..."
+        if [ ! -f .env.dev ]; then
+            print_message "No .env.dev found. Creating from example..."
+            cp .env.dev.example .env.dev
+        fi
         docker compose -f docker-compose.dev.yml up --build
         ;;
     "down")
-        echo "👋 Stopping DumbDrop development environment..."
+        print_message "Stopping DumbDrop development environment..."
         docker compose -f docker-compose.dev.yml down
         ;;
     "logs")
-        echo "📝 Showing DumbDrop logs..."
+        print_message "Showing DumbDrop logs..."
         docker compose -f docker-compose.dev.yml logs -f
         ;;
     "rebuild")
-        echo "🔨 Rebuilding DumbDrop..."
+        print_message "Rebuilding DumbDrop..."
         docker compose -f docker-compose.dev.yml build --no-cache
+        docker compose -f docker-compose.dev.yml up
         ;;
     "clean")
-        echo "🧹 Cleaning up development environment..."
-        docker compose -f docker-compose.dev.yml down -v
+        print_message "Cleaning up development environment..."
+        docker compose -f docker-compose.dev.yml down -v --remove-orphans
+        rm -f .env.dev
+        print_message "Cleaned up containers, volumes, and env file"
+        ;;
+    "shell")
+        print_message "Opening shell in container..."
+        docker compose -f docker-compose.dev.yml exec app sh
+        ;;
+    "test")
+        print_message "Running tests..."
+        docker compose -f docker-compose.dev.yml exec app npm test
+        ;;
+    "lint")
+        print_message "Running linter..."
+        docker compose -f docker-compose.dev.yml exec app npm run lint
         ;;
     *)
-        echo "DumbDrop Development Helper"
+        echo -e "${GREEN}DumbDrop Development Helper${NC}"
         echo "Usage: ./dev.sh [command]"
         echo ""
         echo "Commands:"
-        echo "  up        - Start development environment"
+        echo "  up        - Start development environment (creates .env.dev if missing)"
         echo "  down      - Stop development environment"
         echo "  logs      - Show container logs"
-        echo "  rebuild   - Rebuild container without cache"
-        echo "  clean     - Clean up everything"
+        echo "  rebuild   - Rebuild container without cache and start"
+        echo "  clean     - Clean up everything (containers, volumes, env)"
+        echo "  shell     - Open shell in container"
+        echo "  test      - Run tests"
+        echo "  lint      - Run linter"
         ;;
 esac 

@@ -1,70 +1,80 @@
-# DumbDrop Development
-
-Because we're too dumb for complexity, development is super simple!
+# DumbDrop Development Guide
 
 ## Quick Start
 
-1. Clone this repo
-2. Navigate to the `dev` directory
-3. Use our dumb-simple development script:
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/DumbDrop.git
+   cd DumbDrop
+   ```
 
-```bash
-# Start development environment
-./dev.sh up
+2. Set up development environment:
+   ```bash
+   cd dev
+   cp .env.dev.example .env.dev
+   ```
 
-# Stop development environment
-./dev.sh down
+3. Start development server:
+   ```bash
+   docker-compose -f docker-compose.dev.yml up
+   ```
 
-# View logs
-./dev.sh logs
-
-# Rebuild without cache
-./dev.sh rebuild
-
-# Clean everything up
-./dev.sh clean
-```
+The application will be available at http://localhost:3000 with hot-reloading enabled.
 
 ## Development Environment Features
 
-Our development setup is sophisticatedly simple:
-
-- Builds from local Dockerfile instead of pulling image
-- Mounts local directory for live code changes
-- Uses development-specific settings
-- Adds helpful labels for container identification
-- Hot-reloading for faster development
-
-## Development-specific Settings
-
-The `docker-compose.dev.yml` includes:
-- Local volume mounts for live code updates
+- Hot-reloading with nodemon
 - Development-specific environment variables
-- Container labels for easy identification
-- Automatic container restart for development
+- Local file storage in `../local_uploads`
+- Debug logging enabled
+- Development-specific notifications
 
-### Node Modules Handling
-
-Our volume setup uses a technique called "volume masking" for handling node_modules:
-```yaml
-volumes:
-  - ../:/app              # Mount local code
-  - /app/node_modules     # Mask node_modules directory
-```
-
-This setup:
-- Prevents local node_modules from interfering with container modules
-- Preserves container's node_modules installed during build
-- Avoids platform-specific module issues
-- Keeps development simple and consistent across environments
-
-## Directory Structure
+## Project Structure
 
 ```
-dev/
-├── README.md               # You are here!
-├── docker-compose.dev.yml  # Development-specific Docker setup
-└── dev.sh                 # Simple development helper script
+DumbDrop/
+├── dev/                    # Development configurations
+│   ├── docker-compose.dev.yml
+│   ├── .env.dev.example
+│   └── README.md
+├── src/                    # Application source code
+├── public/                # Static assets
+├── local_uploads/         # Development file storage
+└── [Production files in root]
 ```
 
-That's it! We told you it was dumb simple! If you need more complexity, you're probably in the wrong place! 
+## Development Workflow
+
+1. Create feature branches from `main`:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+2. Make changes and test locally
+3. Commit using conventional commits:
+   ```bash
+   feat: add new feature
+   fix: resolve bug
+   docs: update documentation
+   ```
+
+4. Push and create pull request
+
+## Testing
+
+Run tests locally:
+```bash
+npm test
+```
+
+## Debugging
+
+- Use `DEBUG=dumbdrop:*` for detailed logs
+- Container shell access: `docker-compose -f docker-compose.dev.yml exec app sh`
+- Logs: `docker-compose -f docker-compose.dev.yml logs -f app`
+
+## Common Issues
+
+1. Port conflicts: Change port in `.env.dev`
+2. File permissions: Ensure proper ownership of `local_uploads`
+3. Node modules: Remove and rebuild with `docker-compose -f docker-compose.dev.yml build --no-cache`

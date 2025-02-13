@@ -1,0 +1,87 @@
+# Project Principles
+
+# Code Philosophy
+- Keep code simple, smart, and follow best practices
+- Don't over-engineer for the sake of engineering
+- Use standard conventions and patterns
+- Write human-readable code
+- Keep it simple so the app just works
+- Follow the principle: "Make it work, make it right, make it fast"
+- Comments should explain "why" behind the code in more complex functions
+- Overcommented code is better than undercommented code
+
+# Commit Conventions
+- Use Conventional Commits format:
+  - feat: new features
+  - fix: bug fixes
+  - docs: documentation changes
+  - style: formatting, missing semi colons, etc.
+  - refactor: code changes that neither fix bugs nor add features
+  - test: adding or modifying tests
+  - chore: updating build tasks, package manager configs, etc.
+- Each commit should be atomic and focused
+- Write clear, descriptive commit messages
+
+# Project Structure
+
+# Root Directory
+- Keep root directory clean with only essential files
+- Production configuration files in root:
+  - docker-compose.yml
+  - Dockerfile
+  - .env.example
+  - package.json
+  - README.md
+
+# Source Code (/src)
+- All application source code in /src directory
+  - app.js: Application setup and configuration
+  - server.js: Server entry point
+  - routes/: Route handlers
+  - middleware/: Custom middleware
+  - utils/: Helper functions and utilities
+  - models/: Data models (if applicable)
+  - services/: Business logic
+
+# Development
+- All development configurations in /dev directory
+- Development specific files:
+  - /dev/docker-compose.dev.yml
+  - /dev/.env.dev.example
+  - /dev/README.md (development setup instructions)
+
+# Static Assets and Uploads
+- Static assets in /public directory
+- Upload directories:
+  - /uploads (production)
+  - /local_uploads (local development)
+
+# Testing
+- Tests are mandatory for all new features
+- Test files location:
+  - Unit tests: __tests__/unit/
+  - Integration tests: __tests__/integration/
+  - E2E tests: __tests__/e2e/
+- Test naming convention:
+  - Unit tests: [feature].test.js
+  - Integration tests: [feature].integration.test.js
+  - E2E tests: [feature].e2e.test.js
+- Test coverage requirements:
+  - Minimum 80% coverage for new features
+  - Must include happy path and error cases
+  - API endpoints must have integration tests
+
+# Documentation
+- Main README.md in root focuses on production deployment
+- Development documentation in /dev/README.md
+- Code must be self-documenting with clear naming
+- Complex logic must include comments explaining "why" not "what"
+- JSDoc comments for public functions and APIs
+
+# Code Style
+- Follow ESLint and Prettier configurations
+- Use meaningful variable and function names
+- Keep functions small and focused
+- Maximum line length: 100 characters
+- Use modern JavaScript features appropriately
+- Prefer clarity over cleverness 

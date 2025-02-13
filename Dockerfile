@@ -1,4 +1,5 @@
-FROM node:18-alpine
+# Base stage for shared configurations
+FROM node:20-alpine as base
 
 # Install python and create virtual environment
 RUN apk add --no-cache python3 py3-pip && \
@@ -11,16 +12,40 @@ RUN . /opt/venv/bin/activate && \
 # Add virtual environment to PATH
 ENV PATH="/opt/venv/bin:$PATH"
 
-WORKDIR /app
+WORKDIR /usr/src/app
+
+# Development stage
+FROM base as development
+ENV NODE_ENV=development
 
 COPY package*.json ./
-
 RUN npm install
 
+# Create upload directories
+RUN mkdir -p uploads local_uploads
+
+# Copy source
 COPY . .
 
-RUN mkdir -p uploads
-
+# Expose port
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+CMD ["npm", "run", "dev"]
+
+# Production stage
+FROM base as production
+ENV NODE_ENV=production
+
+COPY package*.json ./
+RUN npm ci --only=production
+
+# Create upload directory
+RUN mkdir -p uploads
+
+# Copy source
+COPY . .
+
+# Expose port
+EXPOSE 3000
+
+CMD ["npm", "start"]
