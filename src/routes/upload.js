@@ -7,6 +7,8 @@ const logger = require('../utils/logger');
 const { getUniqueFilePath, getUniqueFolderPath } = require('../utils/fileUtils');
 const { sendNotification } = require('../services/notifications');
 const fs = require('fs');
+const multer = require('multer');
+const { cleanupIncompleteUploads } = require('../utils/cleanup');
 
 // Store ongoing uploads
 const uploads = new Map();
@@ -16,6 +18,65 @@ const folderMappings = new Map();
 const batchActivity = new Map();
 // Store upload to batch mappings
 const uploadToBatch = new Map();
+
+const BATCH_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
+let cleanupInterval;
+
+/**
+ * Start the cleanup interval for inactive batches
+ * @returns {NodeJS.Timeout} The interval handle
+ */
+function startBatchCleanup() {
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+  }
+  
+  cleanupInterval = setInterval(() => {
+    const now = Date.now();
+    logger.info(`Running batch cleanup, checking ${batchActivity.size} active batches`);
+    
+    for (const [batchId, lastActivity] of batchActivity.entries()) {
+      if (now - lastActivity >= BATCH_TIMEOUT) {
+        logger.info(`Cleaning up inactive batch: ${batchId}`);
+        batchActivity.delete(batchId);
+      }
+    }
+  }, 5 * 60 * 1000); // 5 minutes
+  
+  return cleanupInterval;
+}
+
+/**
+ * Stop the batch cleanup interval
+ */
+function stopBatchCleanup() {
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
+  }
+}
+
+// Start cleanup interval unless disabled
+if (!process.env.DISABLE_BATCH_CLEANUP) {
+  startBatchCleanup();
+}
+
+// Run cleanup periodically
+const CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const cleanupTimer = setInterval(() => {
+  cleanupIncompleteUploads(uploads, uploadToBatch, batchActivity)
+    .catch(err => logger.error(`Cleanup failed: ${err.message}`));
+}, CLEANUP_INTERVAL);
+
+// Handle cleanup timer errors
+cleanupTimer.unref(); // Don't keep process alive just for cleanup
+process.on('SIGTERM', () => {
+  clearInterval(cleanupTimer);
+  // Final cleanup
+  cleanupIncompleteUploads(uploads, uploadToBatch, batchActivity)
+    .catch(err => logger.error(`Final cleanup failed: ${err.message}`));
+});
 
 /**
  * Log the current state of uploads and mappings
@@ -38,49 +99,6 @@ function logUploadState(context) {
 function isValidBatchId(batchId) {
   return /^\d+-[a-z0-9]{9}$/.test(batchId);
 }
-
-// Add cleanup interval for inactive batches (5 minutes)
-setInterval(() => {
-  const now = Date.now();
-  logger.info(`Running batch cleanup, checking ${batchActivity.size} active batches`);
-  
-  for (const [batchId, lastActivity] of batchActivity.entries()) {
-    if (now - lastActivity >= 5 * 60 * 1000) {
-      logger.info(`Cleaning up inactive batch: ${batchId}, last active: ${new Date(lastActivity).toISOString()}`);
-      
-      // Clean up any uploads associated with this batch
-      let cleanedUploads = 0;
-      for (const [uploadId, upload] of uploads.entries()) {
-        if (uploadToBatch.get(uploadId) === batchId) {
-          // Close the write stream
-          upload.writeStream.end();
-          // Delete the incomplete file
-          fs.promises.unlink(upload.filePath).catch(err => {
-            logger.error(`Failed to delete incomplete upload during batch cleanup: ${err.message}`);
-          });
-          // Remove the upload
-          uploads.delete(uploadId);
-          uploadToBatch.delete(uploadId);
-          cleanedUploads++;
-        }
-      }
-      logger.info(`Cleaned up ${cleanedUploads} incomplete uploads for batch: ${batchId}`);
-
-      // Clean up folder mappings
-      let cleanedMappings = 0;
-      for (const key of folderMappings.keys()) {
-        if (key.endsWith(`-${batchId}`)) {
-          folderMappings.delete(key);
-          cleanedMappings++;
-        }
-      }
-      
-      batchActivity.delete(batchId);
-      logger.info(`Cleaned up ${cleanedMappings} folder mappings for batch: ${batchId}`);
-      logUploadState('After Batch Cleanup');
-    }
-  }
-}, 60000);
 
 // Initialize upload
 router.post('/init', async (req, res) => {
@@ -183,6 +201,9 @@ router.post('/init', async (req, res) => {
         
         if (!newFolderName) {
           try {
+            // First ensure parent directories exist
+            await fs.promises.mkdir(path.dirname(folderPath), { recursive: true });
+            // Then try to create the target folder
             await fs.promises.mkdir(folderPath, { recursive: false });
             newFolderName = originalFolderName;
           } catch (err) {
@@ -364,4 +385,11 @@ router.post('/cancel/:uploadId', async (req, res) => {
   res.json({ message: 'Upload cancelled' });
 });
 
-module.exports = router; 
+module.exports = {
+  router,
+  startBatchCleanup,
+  stopBatchCleanup,
+  // Export for testing
+  batchActivity,
+  BATCH_TIMEOUT
+}; 

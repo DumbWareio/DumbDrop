@@ -1,6 +1,50 @@
 const fs = require('fs').promises;
 const path = require('path');
+
+const TEST_UPLOAD_DIR = path.join(__dirname, '../test_uploads');
+
+const TEST_CONFIG = {
+  port: 3001,
+  uploadDir: TEST_UPLOAD_DIR,
+  uploadDisplayPath: TEST_UPLOAD_DIR, // Add display path for test environment
+  maxFileSize: 1024 * 1024, // 1MB
+  siteTitle: 'DumbDrop-Test',
+  pin: null, // No PIN for tests
+  autoUpload: false,
+  appriseUrl: null,
+  cleanupInterval: 3600000, // 1 hour
+  maxAge: 86400000, // 24 hours
+};
+
+// Disable cleanup intervals for tests
+process.env.DISABLE_SECURITY_CLEANUP = 'true';
+process.env.DISABLE_BATCH_CLEANUP = 'true';
+
+// Mock the config module before requiring app
+jest.mock('../src/config', () => {
+  return {
+    config: {
+      port: 3001,
+      uploadDir: process.env.TEST_UPLOAD_DIR,
+      uploadDisplayPath: process.env.TEST_UPLOAD_DIR, // Add display path
+      maxFileSize: 1024 * 1024,
+      siteTitle: 'DumbDrop-Test',
+      pin: null,
+      autoUpload: false,
+      appriseUrl: null,
+      cleanupInterval: 3600000,
+      maxAge: 86400000,
+    },
+    validateConfig: jest.fn()
+  };
+});
+
+// Set test upload directory in environment
+process.env.TEST_UPLOAD_DIR = TEST_UPLOAD_DIR;
+
 const { app, initialize } = require('../src/app');
+const { stopCleanupInterval } = require('../src/utils/security');
+const { stopBatchCleanup } = require('../src/routes/upload');
 
 // Mock console to prevent noise during tests
 global.console = {
@@ -12,19 +56,18 @@ global.console = {
 };
 
 let server;
-let cleanupTimer;
 
 // Initialize app before all tests
 beforeAll(async () => {
   try {
     // Create test upload directory
-    await fs.mkdir(path.join(__dirname, '../test_uploads'), { recursive: true });
+    await fs.mkdir(TEST_CONFIG.uploadDir, { recursive: true });
     
     // Initialize the app
     await initialize();
     
     // Start server
-    server = app.listen(process.env.PORT);
+    server = app.listen(TEST_CONFIG.port);
   } catch (err) {
     console.error('Test setup failed:', err);
     throw err;
@@ -36,41 +79,44 @@ beforeEach(async () => {
   // Reset mocks
   jest.clearAllMocks();
   
-  // Reset environment variables
-  process.env.NODE_ENV = 'test';
-  process.env.PORT = '3001';
-  process.env.UPLOAD_DIR = path.join(__dirname, '../test_uploads');
-  process.env.MAX_FILE_SIZE = '1'; // 1MB
-  process.env.DUMBDROP_TITLE = 'DumbDrop-Test';
-  
-  // Clear any existing cleanup timers
-  if (cleanupTimer) {
-    clearInterval(cleanupTimer);
-  }
+  // Ensure upload directory exists
+  await fs.mkdir(TEST_CONFIG.uploadDir, { recursive: true });
 });
 
-// Clean up test files after each test
-afterEach(async () => {
+/**
+ * Recursively remove a directory and its contents
+ * @param {string} dir - Directory to remove
+ */
+async function removeDir(dir) {
   try {
-    const files = await fs.readdir(process.env.UPLOAD_DIR);
-    await Promise.all(
-      files.map(file => 
-        fs.unlink(path.join(process.env.UPLOAD_DIR, file))
-      )
-    );
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    await Promise.all(entries.map(async entry => {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await removeDir(fullPath);
+      } else {
+        await fs.unlink(fullPath);
+      }
+    }));
+    await fs.rmdir(dir);
   } catch (err) {
     if (err.code !== 'ENOENT') {
       throw err;
     }
   }
+}
+
+// Clean up test files after each test
+afterEach(async () => {
+  await removeDir(TEST_CONFIG.uploadDir);
+  await fs.mkdir(TEST_CONFIG.uploadDir, { recursive: true });
 });
 
 // Cleanup after all tests
 afterAll(async () => {
-  // Clear any cleanup timers
-  if (cleanupTimer) {
-    clearInterval(cleanupTimer);
-  }
+  // Stop cleanup intervals
+  stopCleanupInterval();
+  stopBatchCleanup();
   
   // Close server
   if (server) {
@@ -78,11 +124,5 @@ afterAll(async () => {
   }
   
   // Remove test directory
-  try {
-    await fs.rm(path.join(__dirname, '../test_uploads'), { recursive: true, force: true });
-  } catch (err) {
-    if (err.code !== 'ENOENT') {
-      console.error('Failed to remove test directory:', err);
-    }
-  }
+  await removeDir(TEST_CONFIG.uploadDir);
 }); 

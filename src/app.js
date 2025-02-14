@@ -23,13 +23,13 @@ app.use(express.json());
 app.use(securityHeaders);
 
 // Import routes
-const uploadRoutes = require('./routes/upload');
+const { router: uploadRouter } = require('./routes/upload');
 const fileRoutes = require('./routes/files');
 const authRoutes = require('./routes/auth');
 
 // Use routes with appropriate middleware
 app.use('/api/auth', pinVerifyLimiter, authRoutes);
-app.use('/api/upload', requirePin(config.pin), initUploadLimiter, uploadRoutes);
+app.use('/api/upload', requirePin(config.pin), initUploadLimiter, uploadRouter);
 app.use('/api/files', requirePin(config.pin), downloadLimiter, fileRoutes);
 
 // Root route

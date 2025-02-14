@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const logger = require('./logger');
+const { config } = require('../config');
 
 /**
  * Store for login attempts with rate limiting
@@ -9,7 +10,50 @@ const loginAttempts = new Map();
 
 // Constants
 const MAX_ATTEMPTS = 5;
-const LOCKOUT_TIME = 15 * 60 * 1000; // 15 minutes
+const LOCKOUT_DURATION = 15 * 60 * 1000; // 15 minutes
+
+let cleanupInterval;
+
+/**
+ * Start the cleanup interval for old lockouts
+ * @returns {NodeJS.Timeout} The interval handle
+ */
+function startCleanupInterval() {
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+  }
+  
+  cleanupInterval = setInterval(() => {
+    const now = Date.now();
+    let cleaned = 0;
+    for (const [ip, attempts] of loginAttempts.entries()) {
+      if (now - attempts.lastAttempt >= LOCKOUT_DURATION) {
+        loginAttempts.delete(ip);
+        cleaned++;
+      }
+    }
+    if (cleaned > 0) {
+      logger.info(`Cleaned up ${cleaned} expired lockouts`);
+    }
+  }, 60000); // Check every minute
+  
+  return cleanupInterval;
+}
+
+/**
+ * Stop the cleanup interval
+ */
+function stopCleanupInterval() {
+  if (cleanupInterval) {
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
+  }
+}
+
+// Start cleanup interval unless disabled
+if (!process.env.DISABLE_SECURITY_CLEANUP) {
+  startCleanupInterval();
+}
 
 /**
  * Reset login attempts for an IP
@@ -31,7 +75,7 @@ function isLockedOut(ip) {
   
   if (attempts.count >= MAX_ATTEMPTS) {
     const timeElapsed = Date.now() - attempts.lastAttempt;
-    if (timeElapsed < LOCKOUT_TIME) {
+    if (timeElapsed < LOCKOUT_DURATION) {
       return true;
     }
     resetAttempts(ip);
@@ -86,27 +130,14 @@ function safeCompare(a, b) {
   }
 }
 
-// Cleanup old lockouts every minute
-setInterval(() => {
-  const now = Date.now();
-  let cleaned = 0;
-  for (const [ip, attempts] of loginAttempts.entries()) {
-    if (now - attempts.lastAttempt >= LOCKOUT_TIME) {
-      loginAttempts.delete(ip);
-      cleaned++;
-    }
-  }
-  if (cleaned > 0) {
-    logger.info(`Cleaned up ${cleaned} expired lockouts`);
-  }
-}, 60000);
-
 module.exports = {
   MAX_ATTEMPTS,
-  LOCKOUT_TIME,
+  LOCKOUT_DURATION,
   resetAttempts,
   isLockedOut,
   recordAttempt,
   validatePin,
-  safeCompare
+  safeCompare,
+  startCleanupInterval,
+  stopCleanupInterval
 }; 

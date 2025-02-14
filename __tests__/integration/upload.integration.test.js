@@ -3,10 +3,26 @@ const path = require('path');
 const fs = require('fs').promises;
 const { app, initialize } = require('../../src/app');
 
+// Import test config
+const TEST_CONFIG = {
+  port: 3001,
+  uploadDir: path.join(__dirname, '../../test_uploads'),
+  uploadDisplayPath: path.join(__dirname, '../../test_uploads'),
+  maxFileSize: 1024 * 1024, // 1MB
+  siteTitle: 'DumbDrop-Test',
+  pin: null, // No PIN for tests
+  autoUpload: false,
+  appriseUrl: null,
+  cleanupInterval: 3600000, // 1 hour
+  maxAge: 86400000, // 24 hours
+};
+
 describe('Upload Flow Integration', () => {
   let authCookie;
   
   beforeAll(async () => {
+    // Create test upload directory
+    await fs.mkdir(TEST_CONFIG.uploadDir, { recursive: true });
     await initialize();
   });
 
@@ -14,8 +30,25 @@ describe('Upload Flow Integration', () => {
     // Reset PIN for each test
     delete process.env.DUMBDROP_PIN;
     
-    // Ensure upload directory exists
-    await fs.mkdir(process.env.UPLOAD_DIR, { recursive: true });
+    // Ensure upload directory exists and is empty
+    await fs.mkdir(TEST_CONFIG.uploadDir, { recursive: true });
+    const files = await fs.readdir(TEST_CONFIG.uploadDir);
+    await Promise.all(
+      files.map(file => 
+        fs.unlink(path.join(TEST_CONFIG.uploadDir, file))
+      )
+    );
+  });
+
+  afterAll(async () => {
+    // Clean up test directory
+    try {
+      await fs.rm(TEST_CONFIG.uploadDir, { recursive: true, force: true });
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        console.error('Failed to remove test directory:', err);
+      }
+    }
   });
 
   async function authenticateWithPin(pin) {
@@ -64,7 +97,7 @@ describe('Upload Flow Integration', () => {
     await new Promise(resolve => setTimeout(resolve, 500));
 
     // Verify file exists and content is correct
-    const uploadedPath = path.join(process.env.UPLOAD_DIR, 'test-file.txt');
+    const uploadedPath = path.join(TEST_CONFIG.uploadDir, 'test-file.txt');
     const content = await fs.readFile(uploadedPath, 'utf8');
     expect(content).toBe(testContent);
   });
@@ -103,7 +136,7 @@ describe('Upload Flow Integration', () => {
     
     // Verify all uploads succeeded
     for (let i = 0; i < uploadCount; i++) {
-      const filePath = path.join(process.env.UPLOAD_DIR, `test-file-${i}.txt`);
+      const filePath = path.join(TEST_CONFIG.uploadDir, `test-file-${i}.txt`);
       const content = await fs.readFile(filePath, 'utf8');
       expect(content).toBe(`Test content ${i}`);
     }
