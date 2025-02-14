@@ -74,191 +74,57 @@
                 this.batchId = batchId;
                 this.uploadId = null;
                 this.position = 0;
-                this.bytesReceived = 0;
                 this.progressElement = null;
-                this.retries = 0;
-                this.startTime = null;
-                this.lastUpdate = null;
-                this.lastBytes = 0;
-                this.speedSamples = [];
-                this.currentSpeed = 0;
-                this.speedUpdateTimer = null;
-                this.progressUpdateTimer = null;
-                this.waitingMessages = [
-                    "Preparing upload...",
-                    "Establishing connection...",
-                    "Starting transfer...",
-                    "Waiting for first chunk..."
-                ];
-                this.waitingMessageIndex = 0;
-                this.waitingMessageInterval = null;
-                this.dotsCount = 1;
-                this.dotsIncreasing = true;
-            }
-
-            cycleWaitingMessage() {
-                if (!this.progressElement || !this.progressElement.infoSpan) return;
-
-                if (this.waitingMessageIndex < this.waitingMessages.length) {
-                    this.progressElement.infoSpan.textContent = this.waitingMessages[this.waitingMessageIndex];
-                    this.waitingMessageIndex++;
-                    
-                    // When we finish the initial messages, add a delay before switching to dot animation
-                    if (this.waitingMessageIndex >= this.waitingMessages.length) {
-                        clearInterval(this.waitingMessageInterval);
-                        // Keep the last message visible for 2 seconds before starting dot animation
-                        setTimeout(() => {
-                            this.waitingMessageInterval = setInterval(() => this.cycleWaitingMessage(), 500);
-                        }, 2000);
-                    }
-                } else {
-                    // Create the dots string
-                    const dots = '.'.repeat(this.dotsCount);
-                    this.progressElement.infoSpan.textContent = `Still working${dots}`;
-                    
-                    // Update dots count
-                    if (this.dotsIncreasing) {
-                        this.dotsCount++;
-                        if (this.dotsCount > 6) {
-                            this.dotsCount = 1;
-                        }
-                    }
-                }
-            }
-
-            startWaitingMessages() {
-                if (this.waitingMessageInterval) {
-                    clearInterval(this.waitingMessageInterval);
-                }
-                // Start with 2 second interval for main messages
-                this.waitingMessageInterval = setInterval(() => this.cycleWaitingMessage(), 2000);
-                this.cycleWaitingMessage(); // Show first message immediately
-            }
-
-            stopWaitingMessages() {
-                if (this.waitingMessageInterval) {
-                    clearInterval(this.waitingMessageInterval);
-                    this.waitingMessageInterval = null;
-                }
-            }
-
-            calculateSpeed(bytesReceived) {
-                const now = Date.now();
-                
-                // Only calculate speed if at least 1 second has passed since last update
-                if (!this.lastUpdate || (now - this.lastUpdate) >= 1000) {
-                    if (this.lastUpdate) {
-                        const timeDiff = (now - this.lastUpdate) / 1000; // Convert to seconds
-                        const bytesDiff = bytesReceived - this.lastBytes;
-                        const instantSpeed = bytesDiff / timeDiff; // Bytes per second
-
-                        // Keep last 3 samples for smoother average
-                        this.speedSamples.push(instantSpeed);
-                        if (this.speedSamples.length > 3) {
-                            this.speedSamples.shift();
-                        }
-
-                        // Calculate weighted moving average with more weight on recent samples
-                        const weights = [0.5, 0.3, 0.2];
-                        const samples = this.speedSamples.slice().reverse(); // Most recent first
-                        this.currentSpeed = samples.reduce((acc, speed, i) => {
-                            return acc + (speed * (weights[i] || 0));
-                        }, 0);
-                    }
-                    this.lastUpdate = now;
-                    this.lastBytes = bytesReceived;
-                }
-
-                return this.currentSpeed;
-            }
-
-            formatSpeed(bytesPerSecond) {
-                const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
-                let value = bytesPerSecond;
-                let unitIndex = 0;
-
-                while (value >= 1024 && unitIndex < units.length - 1) {
-                    value /= 1024;
-                    unitIndex++;
-                }
-
-                return `${value.toFixed(1)} ${units[unitIndex]}`;
-            }
-
-            calculateTimeRemaining(bytesReceived, speed) {
-                if (speed === 0) return 'calculating...';
-                const bytesRemaining = this.file.size - bytesReceived;
-                const secondsRemaining = bytesRemaining / speed;
-
-                if (secondsRemaining < 60) {
-                    return `${Math.ceil(secondsRemaining)}s`;
-                } else if (secondsRemaining < 3600) {
-                    return `${Math.ceil(secondsRemaining / 60)}m`;
-                } else {
-                    return `${Math.ceil(secondsRemaining / 3600)}h`;
-                }
+                this.chunkSize = 1024 * 1024; // 1MB chunks
             }
 
             async start() {
                 try {
-                    this.startTime = Date.now();
-                    // Initialize speed update timer
-                    this.speedUpdateTimer = setInterval(() => {
-                        if (this.bytesReceived > 0) {
-                            this.calculateSpeed(this.bytesReceived);
-                        }
-                    }, 1000);
-
-                    // Add progress update timer for more frequent UI updates
-                    this.progressUpdateTimer = setInterval(() => {
-                        if (this.bytesReceived > 0) {
-                            const progress = (this.bytesReceived / this.file.size) * 100;
-                            this.updateProgress(progress);
-                        }
-                    }, 200); // Update every 200ms
-                    
                     await this.initUpload();
                     await this.uploadChunks();
-                    
-                    // Clear the timers when upload is complete
-                    this.clearTimers();
                     return true;
                 } catch (error) {
-                    this.clearTimers();
                     console.error('Upload failed:', error);
                     if (this.progressElement) {
                         this.progressElement.infoSpan.textContent = `Error: ${error.message}`;
                         this.progressElement.infoSpan.style.color = 'var(--danger-color)';
                     }
-                    this.stopWaitingMessages();
                     return false;
                 }
             }
 
             async initUpload() {
-                const uploadPath = this.file.relativePath ? 
-                    `${this.file.relativePath}${this.file.name}` : 
-                    this.file.name;
+                // Always use webkitRelativePath if available, otherwise fallback to name
+                const uploadPath = this.file.webkitRelativePath || this.file.name;
+                
+                console.log('Initializing upload:', {
+                    path: uploadPath,
+                    size: this.file.size,
+                    batchId: this.batchId
+                });
 
-                const response = await fetch('/upload/init', {
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                
+                if (this.batchId) {
+                    headers['X-Batch-ID'] = this.batchId;
+                }
+
+                const response = await fetch('/api/upload/init', {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'X-Batch-ID': this.batchId
-                    },
+                    headers,
                     body: JSON.stringify({
-                        filename: uploadPath,
+                        filename: uploadPath.replace(/\\/g, '/'), // Ensure forward slashes
                         fileSize: this.file.size
                     })
                 });
 
                 if (!response.ok) {
                     const error = await response.json();
-                    if (response.status === 413) {
-                        throw new Error(`File too large. Maximum size is ${error.limitInMB}MB`);
-                    }
-                    throw new Error('Failed to initialize upload');
+                    throw new Error(error.details || error.error || 'Upload initialization failed');
                 }
+
                 const data = await response.json();
                 this.uploadId = data.uploadId;
             }
@@ -268,40 +134,33 @@
 
                 while (this.position < this.file.size) {
                     const chunk = await this.readChunk();
-                    try {
-                        await this.uploadChunk(chunk);
-                        this.retries = 0;
-                    } catch (error) {
-                        if (this.retries >= MAX_RETRIES) throw error;
-                        this.retries++;
-                        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-                        continue;
-                    }
+                    await this.uploadChunk(chunk);
                 }
             }
 
             async readChunk() {
                 const start = this.position;
-                const end = Math.min(this.position + CHUNK_SIZE, this.file.size);
+                const end = Math.min(this.position + this.chunkSize, this.file.size);
                 const blob = this.file.slice(start, end);
                 this.position = end;
                 return await blob.arrayBuffer();
             }
 
             async uploadChunk(chunk) {
-                const controller = new AbortController();
-                const response = await fetch(`/upload/chunk/${this.uploadId}`, {
+                const response = await fetch(`/api/upload/chunk/${this.uploadId}`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/octet-stream'
+                        'Content-Type': 'application/octet-stream',
+                        'X-Batch-ID': this.batchId
                     },
-                    body: chunk,
-                    signal: controller.signal
+                    body: chunk
                 });
 
-                if (!response.ok) throw new Error('Chunk upload failed');
+                if (!response.ok) {
+                    throw new Error(`Failed to upload chunk: ${response.statusText}`);
+                }
+
                 const data = await response.json();
-                this.bytesReceived = Math.floor((data.progress / 100) * this.file.size);
                 this.updateProgress(data.progress);
             }
 
@@ -311,88 +170,37 @@
                 
                 const label = document.createElement('div');
                 label.className = 'progress-label';
-
-                const pathSpan = document.createElement('span');
-                pathSpan.className = 'progress-path';
-                const displayPath = this.file.relativePath ? 
-                    `📁 ${this.file.relativePath}${this.file.name}` : 
-                    `📄 ${this.file.name}`;
-                pathSpan.textContent = displayPath;
-                
-                label.appendChild(pathSpan);
+                label.textContent = this.file.webkitRelativePath || this.file.name;
 
                 const progress = document.createElement('div');
                 progress.className = 'progress';
                 
                 const bar = document.createElement('div');
                 bar.className = 'progress-bar';
-                bar.style.width = '0%';
-
-                const statusDiv = document.createElement('div');
-                statusDiv.className = 'progress-status';
-
-                const infoSpan = document.createElement('div');
-                infoSpan.className = 'progress-info';
-
-                const details = document.createElement('div');
-                details.className = 'progress-details';
-
-                statusDiv.appendChild(infoSpan);
-                statusDiv.appendChild(details);
+                
+                const info = document.createElement('div');
+                info.className = 'progress-info';
 
                 progress.appendChild(bar);
                 container.appendChild(label);
                 container.appendChild(progress);
-                container.appendChild(statusDiv);
+                container.appendChild(info);
                 
                 document.getElementById('uploadProgress').appendChild(container);
-                this.progressElement = { container, bar, infoSpan, details };
-                
-                // Start cycling waiting messages
-                this.startWaitingMessages();
+                this.progressElement = { container, bar, infoSpan: info };
             }
 
             updateProgress(percent) {
                 if (this.progressElement) {
-                    // Use the current speed value instead of calculating it every time
-                    const speed = this.currentSpeed;
-                    
-                    // Stop waiting messages once we start receiving data
-                    if (this.bytesReceived > 0) {
-                        this.stopWaitingMessages();
-                    }
-                    
-                    const timeRemaining = this.calculateTimeRemaining(this.bytesReceived, speed);
-                    
-                    this.progressElement.bar.style.width = `${percent.toFixed(1)}%`;
-                    
-                    // Only show speed and time if we've received data
-                    if (this.bytesReceived > 0) {
-                        this.progressElement.infoSpan.textContent = `${this.formatSpeed(speed)} · ${timeRemaining}`;
-                    }
-                    
-                    // Update details with progress and file size
-                    this.progressElement.details.textContent = 
-                        `${formatFileSize(this.bytesReceived)} of ${formatFileSize(this.file.size)} (${percent.toFixed(1)}%)`;
+                    this.progressElement.bar.style.width = `${percent}%`;
+                    this.progressElement.infoSpan.textContent = 
+                        `${formatFileSize(this.file.size)} - ${percent.toFixed(1)}%`;
 
                     if (percent === 100) {
-                        this.stopWaitingMessages();
-                        this.clearTimers();
                         setTimeout(() => {
                             this.progressElement.container.remove();
                         }, 1000);
                     }
-                }
-            }
-
-            clearTimers() {
-                if (this.speedUpdateTimer) {
-                    clearInterval(this.speedUpdateTimer);
-                    this.speedUpdateTimer = null;
-                }
-                if (this.progressUpdateTimer) {
-                    clearInterval(this.progressUpdateTimer);
-                    this.progressUpdateTimer = null;
                 }
             }
         }
@@ -405,81 +213,178 @@
         const uploadButton = document.getElementById('uploadButton');
         let files = [];
 
-        // Helper function to group files by folder
-        function groupFilesByFolder(fileList) {
-            const groups = new Map();
-            
-            fileList.forEach(file => {
-                const path = file.webkitRelativePath || file.relativePath + file.name;
-                const parts = path.split('/');
-                
-                if (parts.length > 1) {
-                    // This is a file in a folder
-                    const folderName = parts[0];
-                    if (!groups.has(folderName)) {
-                        groups.set(folderName, {
-                            name: folderName,
-                            isFolder: true,
-                            totalSize: 0,
-                            files: [],
-                            // Use the first file's batch ID or generate a new one
-                            batchId: file.batchId
-                        });
-                    }
-                    const group = groups.get(folderName);
-                    // If group doesn't have a batch ID yet, use the file's batch ID
-                    if (!group.batchId) {
-                        group.batchId = file.batchId;
-                    }
-                    group.files.push(file);
-                    group.totalSize += file.size;
-                } else {
-                    // This is a root-level file
-                    groups.set(file.name, {
-                        name: file.name,
-                        isFolder: false,
-                        totalSize: file.size,
-                        files: [file],
-                        batchId: file.batchId
-                    });
-                }
-            });
-            
-            return Array.from(groups.values());
-        }
-
-        // Helper function to process directory entries
+        // For drag and drop folders
         async function getAllFileEntries(dataTransferItems) {
+            console.debug('Starting getAllFileEntries with items:', Array.from(dataTransferItems).map(item => ({
+                kind: item.kind,
+                type: item.type
+            })));
+            
             let fileEntries = [];
-            const batchId = generateBatchId();
+            let rootFolderName = null;
             
             async function traverseEntry(entry, path = '') {
+                console.debug('Traversing entry:', {
+                    name: entry.name,
+                    isFile: entry.isFile,
+                    isDirectory: entry.isDirectory,
+                    currentPath: path
+                });
+
                 if (entry.isFile) {
-                    const file = await new Promise((resolve) => entry.file(resolve));
-                    file.relativePath = path;
-                    file.batchId = batchId; // Use the same batch ID for all files in this drop
+                    const file = await new Promise((resolve, reject) => {
+                        entry.file(file => {
+                            console.debug('Processing file in traverseEntry:', {
+                                name: file.name,
+                                size: file.size,
+                                type: file.type,
+                                currentPath: path,
+                                rootFolderName: rootFolderName
+                            });
+
+                            // If this is the first file and we don't have a root folder name yet,
+                            // use its parent folder name
+                            if (!rootFolderName && path) {
+                                rootFolderName = path.split('/')[0];
+                                console.debug('Set root folder name from file path:', rootFolderName);
+                            }
+                            
+                            const fullPath = path ? `${path}/${entry.name}` : entry.name;
+                            console.debug('Constructed full path:', {
+                                path: path,
+                                entryName: entry.name,
+                                fullPath: fullPath
+                            });
+                            
+                            const fileWithPath = new File([file], entry.name, {
+                                type: file.type,
+                                lastModified: file.lastModified
+                            });
+
+                            if (rootFolderName) {
+                                const relativePath = fullPath.startsWith(rootFolderName) ? 
+                                    fullPath : 
+                                    `${rootFolderName}/${fullPath}`;
+                                // Use Object.defineProperty to ensure webkitRelativePath is properly set
+                                Object.defineProperty(fileWithPath, 'webkitRelativePath', {
+                                    value: relativePath,
+                                    writable: false,
+                                    configurable: true
+                                });
+                                console.debug('Set webkitRelativePath with root folder:', {
+                                    fullPath: fullPath,
+                                    rootFolderName: rootFolderName,
+                                    relativePath: relativePath,
+                                    hasWebkitRelativePath: 'webkitRelativePath' in fileWithPath,
+                                    webkitRelativePath: fileWithPath.webkitRelativePath
+                                });
+                            } else {
+                                Object.defineProperty(fileWithPath, 'webkitRelativePath', {
+                                    value: fullPath,
+                                    writable: false,
+                                    configurable: true
+                                });
+                                console.debug('Set webkitRelativePath without root folder:', {
+                                    fullPath: fullPath,
+                                    hasWebkitRelativePath: 'webkitRelativePath' in fileWithPath,
+                                    webkitRelativePath: fileWithPath.webkitRelativePath
+                                });
+                            }
+                            
+                            resolve(fileWithPath);
+                        }, reject);
+                    });
                     fileEntries.push(file);
                 } else if (entry.isDirectory) {
-                    const reader = entry.createReader();
-                    const entries = await new Promise((resolve) => {
-                        reader.readEntries(resolve);
+                    console.debug('Processing directory:', {
+                        name: entry.name,
+                        currentPath: path,
+                        isRootLevel: !path,
+                        currentRootFolderName: rootFolderName
+                    });
+
+                    if (!path && !rootFolderName) {
+                        rootFolderName = entry.name;
+                        console.debug('Set root folder name from directory:', rootFolderName);
+                    }
+                    
+                    const dirReader = entry.createReader();
+                    let entries = [];
+                    
+                    let readEntries = await new Promise((resolve, reject) => {
+                        const readNextBatch = () => {
+                            dirReader.readEntries(batch => {
+                                console.debug('Read directory batch:', {
+                                    directoryName: entry.name,
+                                    batchSize: batch.length,
+                                    entries: batch.map(e => ({
+                                        name: e.name,
+                                        isFile: e.isFile,
+                                        isDirectory: e.isDirectory
+                                    }))
+                                });
+
+                                if (batch.length > 0) {
+                                    entries = entries.concat(batch);
+                                    readNextBatch();
+                                } else {
+                                    resolve(entries);
+                                }
+                            }, reject);
+                        };
+                        readNextBatch();
+                    });
+                    
+                    const dirPath = path ? `${path}/${entry.name}` : entry.name;
+                    console.debug('Processing directory contents:', {
+                        directoryName: entry.name,
+                        currentPath: path,
+                        newDirPath: dirPath,
+                        totalEntries: entries.length
                     });
                     
                     for (const childEntry of entries) {
-                        await traverseEntry(childEntry, path + entry.name + '/');
+                        await traverseEntry(childEntry, dirPath);
                     }
                 }
             }
 
-            const items = [...dataTransferItems];
-            for (const item of items) {
-                const entry = item.webkitGetAsEntry();
-                if (entry) {
-                    await traverseEntry(entry);
+            try {
+                for (const item of dataTransferItems) {
+                    const entry = item.webkitGetAsEntry();
+                    if (entry) {
+                        console.debug('Processing root level item:', {
+                            name: entry.name,
+                            isFile: entry.isFile,
+                            isDirectory: entry.isDirectory
+                        });
+                        await traverseEntry(entry);
+                    }
                 }
-            }
 
-            return fileEntries;
+                console.debug('Final file entries before sorting:', fileEntries.map(f => ({
+                    name: f.name,
+                    path: f.webkitRelativePath,
+                    size: f.size,
+                    hasWebkitRelativePath: 'webkitRelativePath' in f,
+                    webkitRelativePath: f.webkitRelativePath
+                })));
+
+                fileEntries.sort((a, b) => a.webkitRelativePath.localeCompare(b.webkitRelativePath));
+
+                console.debug('Final sorted file entries:', fileEntries.map(f => ({
+                    name: f.name,
+                    path: f.webkitRelativePath,
+                    size: f.size,
+                    hasWebkitRelativePath: 'webkitRelativePath' in f,
+                    webkitRelativePath: f.webkitRelativePath
+                })));
+
+                return fileEntries;
+            } catch (error) {
+                console.error('Error in getAllFileEntries:', error);
+                throw error;
+            }
         }
 
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -516,106 +421,324 @@
         function handleDrop(e) {
             const items = e.dataTransfer.items;
             if (items && items[0].webkitGetAsEntry) {
-                // Handle folder/file drop using DataTransferItemList
+                // Show loading state
+                const loadingItem = document.createElement('div');
+                loadingItem.className = 'file-item loading';
+                loadingItem.textContent = 'Processing dropped items...';
+                fileList.appendChild(loadingItem);
+
                 getAllFileEntries(items).then(newFiles => {
+                    // Remove loading state
+                    loadingItem.remove();
+                    
+                    if (newFiles.length === 0) {
+                        console.warn('No valid files found in drop');
+                        return;
+                    }
+
                     files = newFiles;
                     updateFileList();
                     if (AUTO_UPLOAD) startUploads();
+                }).catch(error => {
+                    console.error('Error processing dropped items:', error);
+                    loadingItem.textContent = `Error: ${error.message}`;
+                    loadingItem.style.color = 'var(--danger-color)';
+                    setTimeout(() => loadingItem.remove(), 3000);
                 });
             } else {
-                // Handle single file drop
-                const batchId = generateBatchId();
+                // Handle regular files (not folders)
                 files = [...e.dataTransfer.files];
-                files.forEach(file => {
-                    file.relativePath = ''; // No relative path for dropped files
-                    file.batchId = batchId;
-                });
                 updateFileList();
                 if (AUTO_UPLOAD) startUploads();
             }
         }
 
         function handleFiles(e) {
-            const batchId = generateBatchId();
-            files = [...e.target.files];
-            files.forEach(file => {
-                file.relativePath = ''; // No relative path for individual files
-                file.batchId = batchId;
-            });
+            // Reset the input to allow selecting the same file again
+            const input = e.target;
+            files = [...input.files];
             updateFileList();
-            if (AUTO_UPLOAD) startUploads();
+            if (AUTO_UPLOAD) {
+                startUploads().finally(() => {
+                    // Reset the input value after upload
+                    input.value = '';
+                });
+            }
         }
 
         function handleFolders(e) {
-            const batchId = generateBatchId();
-            files = [...e.target.files];
-            files.forEach(file => {
-                const pathParts = file.webkitRelativePath.split('/');
-                pathParts.pop(); // Remove filename
-                file.relativePath = pathParts.length > 0 ? pathParts.join('/') + '/' : '';
-                file.batchId = batchId;
-            });
+            // Reset the input to allow selecting the same folder again
+            const input = e.target;
+            files = [...input.files];
+            console.log('Folder selection files:', files.map(f => ({
+                name: f.name,
+                path: f.webkitRelativePath,
+                size: f.size
+            })));
             updateFileList();
-            if (AUTO_UPLOAD) startUploads();
+            if (AUTO_UPLOAD) {
+                startUploads().finally(() => {
+                    // Reset the input value after upload
+                    input.value = '';
+                });
+            }
         }
 
         function updateFileList() {
+            console.debug('Starting updateFileList with files:', files.map(f => ({
+                name: f.name,
+                path: f.webkitRelativePath,
+                size: f.size,
+                hasWebkitRelativePath: 'webkitRelativePath' in f,
+                webkitRelativePath: f.webkitRelativePath
+            })));
+
             fileList.innerHTML = '';
-            const groupedItems = groupFilesByFolder(files);
             
-            groupedItems.forEach(item => {
-                const fileItem = document.createElement('div');
-                fileItem.className = 'file-item';
+            const folders = new Map();
+            let rootFiles = [];
+            
+            // First, determine if we have a root folder structure
+            const hasRootFolder = files.some(file => {
+                const hasPath = 'webkitRelativePath' in file && file.webkitRelativePath;
+                console.debug('Checking file for root folder:', {
+                    name: file.name,
+                    hasWebkitRelativePath: 'webkitRelativePath' in file,
+                    webkitRelativePath: file.webkitRelativePath,
+                    hasPath: hasPath
+                });
+                return hasPath && file.webkitRelativePath.includes('/');
+            });
+            console.debug('Folder structure detection:', {
+                hasRootFolder,
+                totalFiles: files.length
+            });
+            
+            files.forEach(file => {
+                const path = file.webkitRelativePath || file.name;
+                console.debug('Processing file in updateFileList:', {
+                    name: file.name,
+                    path: path,
+                    size: file.size,
+                    hasWebkitRelativePath: 'webkitRelativePath' in file
+                });
                 
-                if (item.isFolder) {
-                    fileItem.innerHTML = `📁 ${item.name}/ (${formatFileSize(item.totalSize)} - ${item.files.length} files)`;
+                if (hasRootFolder) {
+                    const parts = path.split('/');
+                    console.debug('Path parts:', {
+                        path: path,
+                        parts: parts,
+                        length: parts.length
+                    });
+
+                    if (parts.length > 1) {
+                        const folderName = parts[0];
+                        console.debug('Processing folder:', {
+                            folderName: folderName,
+                            pathParts: parts,
+                            fileName: file.name
+                        });
+
+                        if (!folders.has(folderName)) {
+                            folders.set(folderName, {
+                                name: folderName,
+                                files: [],
+                                size: 0,
+                                subfolders: new Map()
+                            });
+                            console.debug('Created new folder:', folderName);
+                        }
+                        
+                        const folder = folders.get(folderName);
+                        folder.files.push(file);
+                        folder.size += file.size;
+                        
+                        if (parts.length > 2) {
+                            console.debug('Processing subfolder structure:', {
+                                folderName: folderName,
+                                subfolderPath: parts.slice(1, -1),
+                                fileName: parts[parts.length - 1]
+                            });
+
+                            let currentFolder = folder;
+                            const subfolderPath = parts.slice(1, -1);
+                            
+                            for (const subfolder of subfolderPath) {
+                                if (!currentFolder.subfolders.has(subfolder)) {
+                                    currentFolder.subfolders.set(subfolder, {
+                                        name: subfolder,
+                                        files: [],
+                                        size: 0,
+                                        subfolders: new Map()
+                                    });
+                                    console.debug('Created new subfolder:', {
+                                        parentFolder: currentFolder.name,
+                                        subfolder: subfolder
+                                    });
+                                }
+                                currentFolder = currentFolder.subfolders.get(subfolder);
+                                currentFolder.files.push(file);
+                                currentFolder.size += file.size;
+                            }
+                        }
+                    } else {
+                        console.debug('Adding root file:', file.name);
+                        rootFiles.push(file);
+                    }
                 } else {
-                    fileItem.innerHTML = `📄 ${item.name} (${formatFileSize(item.totalSize)})`;
+                    console.debug('Adding file as root file:', file.name);
+                    rootFiles.push(file);
+                }
+            });
+            
+            console.debug('Final structure:', {
+                rootFiles: rootFiles.map(f => f.name),
+                folders: Array.from(folders.entries()).map(([name, folder]) => ({
+                    name,
+                    fileCount: folder.files.length,
+                    size: folder.size,
+                    subfolders: Array.from(folder.subfolders.keys())
+                }))
+            });
+            
+            // Function to render a folder's contents
+            function renderFolder(folder, level = 0) {
+                const folderItem = document.createElement('div');
+                folderItem.className = 'file-item folder';
+                
+                // Calculate total files including subfolders
+                const totalFiles = folder.files.filter(f => {
+                    const relativePath = f.webkitRelativePath.substring(folder.name.length + 1);
+                    return relativePath.split('/').length === 1;
+                }).length;
+                
+                folderItem.innerHTML = `📁 ${folder.name}/ (${formatFileSize(folder.size)} - ${totalFiles} files)`;
+                
+                // Add files in folder
+                const filesList = document.createElement('div');
+                filesList.className = 'folder-files';
+                filesList.style.marginLeft = `${level * 20}px`;
+                
+                // First add direct files
+                folder.files
+                    .filter(f => f.webkitRelativePath.substring(folder.name.length + 1).split('/').length === 1)
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .forEach(file => {
+                        const fileItem = document.createElement('div');
+                        fileItem.className = 'file-item nested';
+                        const relativePath = file.webkitRelativePath.substring(folder.name.length + 1);
+                        fileItem.innerHTML = `📄 ${relativePath} (${formatFileSize(file.size)})`;
+                        filesList.appendChild(fileItem);
+                    });
+                
+                // Then add subfolders recursively
+                if (folder.subfolders.size > 0) {
+                    Array.from(folder.subfolders.values())
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .forEach(subfolder => {
+                            filesList.appendChild(renderFolder(subfolder, level + 1));
+                        });
                 }
                 
-                fileList.appendChild(fileItem);
-            });
+                folderItem.appendChild(filesList);
+                return folderItem;
+            }
+            
+            // Add root files first
+            rootFiles.sort((a, b) => a.name.localeCompare(b.name))
+                .forEach(file => {
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    fileItem.innerHTML = `📄 ${file.name} (${formatFileSize(file.size)})`;
+                    fileList.appendChild(fileItem);
+                });
+            
+            // Add folders
+            Array.from(folders.values())
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .forEach(folder => {
+                    fileList.appendChild(renderFolder(folder));
+                });
             
             uploadButton.style.display = (!AUTO_UPLOAD && files.length > 0) ? 'block' : 'none';
         }
 
+        // Add this CSS to the existing styles
+        const style = document.createElement('style');
+        style.textContent = `
+        .folder-files {
+            margin-left: 20px;
+            border-left: 1px solid var(--border-color);
+            padding-left: 10px;
+            margin-top: 5px;
+        }
+        .file-item.nested {
+            font-size: 0.9em;
+            margin-top: 3px;
+        }
+        .file-item.loading {
+            text-align: center;
+            padding: 15px;
+            background: var(--container-bg);
+            border-radius: 5px;
+            margin: 10px 0;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+        `;
+        document.head.appendChild(style);
+
         async function startUploads() {
-            uploadButton.disabled = true;
-            document.getElementById('uploadProgress').innerHTML = '';
-            
-            const groupedItems = groupFilesByFolder(files);
-            
-            const results = await Promise.all(
-                groupedItems.map(async item => {
-                    let success = true;
-                    // Use the group's batch ID for all files in the group
-                    const groupBatchId = item.batchId || generateBatchId();
-                    for (const file of item.files) {
-                        // Always use the group's batch ID
-                        const uploader = new FileUploader(file, groupBatchId);
-                        if (!await uploader.start()) {
-                            success = false;
-                        }
-                    }
-                    return success;
-                })
-            );
-
-            const successful = results.filter(r => r).length;
-            
-            Toastify({
-                text: `Uploaded ${successful} of ${groupedItems.length} items`,
-                duration: 3000,
-                gravity: "bottom",
-                position: "right",
-                style: {
-                    background: successful === groupedItems.length ? "#4CAF50" : "#f44336"
+            try {
+                uploadButton.disabled = true;
+                document.getElementById('uploadProgress').innerHTML = '';
+                
+                const batchId = generateBatchId();
+                const results = [];
+                
+                // Process files sequentially within the same batch to prevent overwhelming the server
+                for (const file of files) {
+                    const uploader = new FileUploader(file, batchId);
+                    const result = await uploader.start();
+                    results.push(result);
                 }
-            }).showToast();
+                
+                const successful = results.filter(r => r).length;
+                const total = results.length;
+                
+                Toastify({
+                    text: `Uploaded ${successful} of ${total} files`,
+                    duration: 3000,
+                    gravity: "bottom",
+                    position: "right",
+                    style: {
+                        background: successful === total ? "#4CAF50" : "#f44336"
+                    }
+                }).showToast();
 
-            files = [];
-            updateFileList();
-            uploadButton.disabled = false;
+                // Reset file inputs
+                fileInput.value = '';
+                folderInput.value = '';
+                files = [];
+                updateFileList();
+            } catch (error) {
+                console.error('Upload failed:', error);
+                Toastify({
+                    text: `Upload failed: ${error.message}`,
+                    duration: 3000,
+                    gravity: "bottom",
+                    position: "right",
+                    style: {
+                        background: "#f44336"
+                    }
+                }).showToast();
+            } finally {
+                uploadButton.disabled = false;
+            }
         }
 
         // Theme management

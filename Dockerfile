@@ -37,6 +37,7 @@ RUN mkdir -p uploads local_uploads
 
 # Copy source with specific paths to avoid unnecessary files
 COPY src/ ./src/
+COPY public/ ./public/
 COPY __tests__/ ./__tests__/
 COPY dev/ ./dev/
 COPY .eslintrc.js .eslintignore ./
@@ -55,6 +56,7 @@ RUN mkdir -p uploads
 
 # Copy only necessary source files
 COPY src/ ./src/
+COPY public/ ./public/
 
 # Expose port
 EXPOSE 3000

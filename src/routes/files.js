@@ -67,26 +67,29 @@ router.get('/:filename/download', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const files = await fs.readdir(config.uploadDir);
-    const fileList = await Promise.all(
-      files
-        .filter(async file => {
-          try {
-            const stats = await fs.stat(path.join(config.uploadDir, file));
-            return stats.isFile();
-          } catch {
-            return false;
-          }
-        })
-        .map(async filename => {
-          const stats = await fs.stat(path.join(config.uploadDir, filename));
-          return {
-            filename,
-            size: stats.size,
-            formattedSize: formatFileSize(stats.size),
-            uploadDate: stats.mtime
-          };
-        })
-    );
+    
+    // Get stats for all files first
+    const fileStatsPromises = files.map(async filename => {
+      try {
+        const stats = await fs.stat(path.join(config.uploadDir, filename));
+        return { filename, stats, valid: stats.isFile() };
+      } catch (err) {
+        logger.error(`Failed to get stats for file ${filename}: ${err.message}`);
+        return { filename, valid: false };
+      }
+    });
+
+    const fileStats = await Promise.all(fileStatsPromises);
+    
+    // Filter and map valid files
+    const fileList = fileStats
+      .filter(file => file.valid)
+      .map(({ filename, stats }) => ({
+        filename,
+        size: stats.size,
+        formattedSize: formatFileSize(stats.size),
+        uploadDate: stats.mtime
+      }));
 
     // Sort files by upload date (newest first)
     fileList.sort((a, b) => b.uploadDate - a.uploadDate);

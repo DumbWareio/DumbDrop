@@ -2,13 +2,32 @@ const rateLimit = require('express-rate-limit');
 
 /**
  * Rate limiter for upload initialization
- * Prevents abuse of the upload system
+ * Limits the number of new upload jobs/batches that can be started
+ * Does not limit the number of files within a batch or chunks within a file
  */
 const initUploadLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute window
-  max: 30, // 30 new upload initializations per minute
+  max: 30, // 30 upload jobs per minute
   message: { 
-    error: 'Too many upload attempts. Please wait before starting new uploads.' 
+    error: 'Too many upload jobs started. Please wait before starting new uploads.' 
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Skip rate limiting for chunk uploads within an existing batch
+  skip: (req, res) => {
+    return req.headers['x-batch-id'] !== undefined;
+  }
+});
+
+/**
+ * Rate limiter for chunk uploads
+ * More permissive to allow large file uploads
+ */
+const chunkUploadLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute window
+  max: 300, // 300 chunks per minute (5 per second)
+  message: {
+    error: 'Upload rate limit exceeded. Please wait before continuing.'
   },
   standardHeaders: true,
   legacyHeaders: false
@@ -44,6 +63,7 @@ const downloadLimiter = rateLimit({
 
 module.exports = {
   initUploadLimiter,
+  chunkUploadLimiter,
   pinVerifyLimiter,
   downloadLimiter
 }; 

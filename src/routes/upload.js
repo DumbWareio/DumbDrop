@@ -14,6 +14,21 @@ const uploads = new Map();
 const folderMappings = new Map();
 // Store batch activity timestamps
 const batchActivity = new Map();
+// Store upload to batch mappings
+const uploadToBatch = new Map();
+
+/**
+ * Log the current state of uploads and mappings
+ * @param {string} context - The context where this log is being called from
+ */
+function logUploadState(context) {
+  logger.debug(`Upload State [${context}]:
+    Active Uploads: ${uploads.size}
+    Active Batches: ${batchActivity.size}
+    Folder Mappings: ${folderMappings.size}
+    Upload-Batch Mappings: ${uploadToBatch.size}
+  `);
+}
 
 /**
  * Validate batch ID format
@@ -27,15 +42,42 @@ function isValidBatchId(batchId) {
 // Add cleanup interval for inactive batches (5 minutes)
 setInterval(() => {
   const now = Date.now();
+  logger.info(`Running batch cleanup, checking ${batchActivity.size} active batches`);
+  
   for (const [batchId, lastActivity] of batchActivity.entries()) {
     if (now - lastActivity >= 5 * 60 * 1000) {
+      logger.info(`Cleaning up inactive batch: ${batchId}, last active: ${new Date(lastActivity).toISOString()}`);
+      
+      // Clean up any uploads associated with this batch
+      let cleanedUploads = 0;
+      for (const [uploadId, upload] of uploads.entries()) {
+        if (uploadToBatch.get(uploadId) === batchId) {
+          // Close the write stream
+          upload.writeStream.end();
+          // Delete the incomplete file
+          fs.promises.unlink(upload.filePath).catch(err => {
+            logger.error(`Failed to delete incomplete upload during batch cleanup: ${err.message}`);
+          });
+          // Remove the upload
+          uploads.delete(uploadId);
+          uploadToBatch.delete(uploadId);
+          cleanedUploads++;
+        }
+      }
+      logger.info(`Cleaned up ${cleanedUploads} incomplete uploads for batch: ${batchId}`);
+
+      // Clean up folder mappings
+      let cleanedMappings = 0;
       for (const key of folderMappings.keys()) {
         if (key.endsWith(`-${batchId}`)) {
           folderMappings.delete(key);
+          cleanedMappings++;
         }
       }
+      
       batchActivity.delete(batchId);
-      logger.info(`Cleaned up folder mappings for inactive batch: ${batchId}`);
+      logger.info(`Cleaned up ${cleanedMappings} folder mappings for batch: ${batchId}`);
+      logUploadState('After Batch Cleanup');
     }
   }
 }, 60000);
@@ -43,20 +85,37 @@ setInterval(() => {
 // Initialize upload
 router.post('/init', async (req, res) => {
   const { filename, fileSize } = req.body;
+  const clientBatchId = req.headers['x-batch-id'];
 
   try {
-    // Validate required fields
-    if (!filename || typeof fileSize !== 'number') {
+    // Log request details for debugging
+    logger.info(`Upload init request:
+      Filename: ${filename}
+      Size: ${fileSize} (${typeof fileSize})
+      Batch ID: ${clientBatchId || 'none'}
+    `);
+
+    // Validate required fields with detailed errors
+    if (!filename) {
       return res.status(400).json({ 
-        error: 'Missing required fields: filename and fileSize (number) are required' 
+        error: 'Missing filename',
+        details: 'The filename field is required'
+      });
+    }
+    
+    if (fileSize === undefined || fileSize === null) {
+      return res.status(400).json({ 
+        error: 'Missing fileSize',
+        details: 'The fileSize field is required'
       });
     }
 
     // Convert fileSize to number if it's a string
-    const size = parseInt(fileSize, 10);
-    if (isNaN(size) || size <= 0) {
+    const size = Number(fileSize);
+    if (isNaN(size) || size < 0) { // Changed from size <= 0 to allow zero-byte files
       return res.status(400).json({ 
-        error: 'Invalid file size: must be a positive number' 
+        error: 'Invalid file size',
+        details: `File size must be a non-negative number, received: ${fileSize} (${typeof fileSize})`
       });
     }
 
@@ -73,16 +132,28 @@ router.post('/init', async (req, res) => {
       });
     }
 
-    // Generate batch ID
-    const timestamp = Date.now();
-    const randomStr = crypto.randomBytes(4).toString('hex').substring(0, 9);
-    const batchId = `${timestamp}-${randomStr}`;
+    // Generate batch ID from header or create new one
+    const batchId = req.headers['x-batch-id'] || `${Date.now()}-${crypto.randomBytes(4).toString('hex').substring(0, 9)}`;
+
+    // Validate batch ID if provided in header
+    if (req.headers['x-batch-id'] && !isValidBatchId(batchId)) {
+      return res.status(400).json({ 
+        error: 'Invalid batch ID format',
+        details: `Batch ID must match format: timestamp-[9 alphanumeric chars], received: ${batchId}`
+      });
+    }
 
     // Update batch activity
     batchActivity.set(batchId, Date.now());
 
-    // Sanitize filename
-    const safeFilename = path.normalize(filename).replace(/^(\.\.(\/|\\|$))+/, '');
+    // Sanitize filename and convert to forward slashes
+    const safeFilename = path.normalize(filename)
+      .replace(/^(\.\.(\/|\\|$))+/, '')
+      .replace(/\\/g, '/')
+      .replace(/^\/+/, ''); // Remove leading slashes
+    
+    // Log sanitized filename
+    logger.info(`Processing upload: ${safeFilename}`);
     
     // Validate file extension if configured
     if (config.allowedExtensions) {
@@ -90,7 +161,8 @@ router.post('/init', async (req, res) => {
       if (!config.allowedExtensions.includes(fileExt)) {
         return res.status(400).json({ 
           error: 'File type not allowed',
-          allowedExtensions: config.allowedExtensions
+          allowedExtensions: config.allowedExtensions,
+          receivedExtension: fileExt
         });
       }
     }
@@ -101,7 +173,7 @@ router.post('/init', async (req, res) => {
     
     try {
       // Handle file/folder paths
-      const pathParts = safeFilename.split('/');
+      const pathParts = safeFilename.split('/').filter(Boolean); // Remove empty parts
       
       if (pathParts.length > 1) {
         // Handle files within folders
@@ -128,6 +200,8 @@ router.post('/init', async (req, res) => {
 
         pathParts[0] = newFolderName;
         filePath = path.join(config.uploadDir, ...pathParts);
+        
+        // Ensure all parent directories exist
         await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
       }
 
@@ -140,13 +214,31 @@ router.post('/init', async (req, res) => {
       uploads.set(uploadId, {
         safeFilename: path.relative(config.uploadDir, filePath),
         filePath,
-        fileSize,
+        fileSize: size,
         bytesReceived: 0,
         writeStream: fileHandle.createWriteStream()
       });
+      
+      // Associate upload with batch
+      uploadToBatch.set(uploadId, batchId);
 
       logger.info(`Initialized upload for ${path.relative(config.uploadDir, filePath)} (${size} bytes)`);
-      res.json({ uploadId });
+      
+      // Log state after initialization
+      logUploadState('After Upload Init');
+
+      // Handle zero-byte files immediately
+      if (size === 0) {
+        const upload = uploads.get(uploadId);
+        upload.writeStream.end();
+        uploads.delete(uploadId);
+        logger.success(`Completed zero-byte file upload: ${upload.safeFilename}`);
+        await sendNotification(upload.safeFilename, 0, config);
+      }
+
+      // Send response
+      return res.json({ uploadId });
+
     } catch (err) {
       if (fileHandle) {
         await fileHandle.close().catch(() => {});
@@ -155,8 +247,17 @@ router.post('/init', async (req, res) => {
       throw err;
     }
   } catch (err) {
-    logger.error(`Upload initialization failed: ${err.message}`);
-    res.status(500).json({ error: 'Failed to initialize upload' });
+    logger.error(`Upload initialization failed:
+      Error: ${err.message}
+      Stack: ${err.stack}
+      Filename: ${filename}
+      Size: ${fileSize}
+      Batch ID: ${clientBatchId || 'none'}
+    `);
+    return res.status(500).json({ 
+      error: 'Failed to initialize upload',
+      details: err.message
+    });
   }
 });
 
@@ -168,14 +269,15 @@ router.post('/chunk/:uploadId', express.raw({
   const { uploadId } = req.params;
   const upload = uploads.get(uploadId);
   const chunkSize = req.body.length;
+  const batchId = req.headers['x-batch-id'];
 
   if (!upload) {
+    logger.warn(`Upload not found: ${uploadId}, Batch ID: ${batchId || 'none'}`);
     return res.status(404).json({ error: 'Upload not found' });
   }
 
   try {
     // Update batch activity if batch ID provided
-    const batchId = req.headers['x-batch-id'];
     if (batchId && isValidBatchId(batchId)) {
       batchActivity.set(batchId, Date.now());
     }
@@ -195,7 +297,14 @@ router.post('/chunk/:uploadId', express.raw({
       100
     );
     
-    logger.info(`Received chunk for ${upload.safeFilename}: ${progress}%`);
+    logger.info(`Chunk received:
+      File: ${upload.safeFilename}
+      Progress: ${progress}%
+      Bytes Received: ${upload.bytesReceived}/${upload.fileSize}
+      Chunk Size: ${chunkSize}
+      Upload ID: ${uploadId}
+      Batch ID: ${batchId || 'none'}
+    `);
 
     // Check if upload is complete
     if (upload.bytesReceived >= upload.fileSize) {
@@ -206,10 +315,16 @@ router.post('/chunk/:uploadId', express.raw({
         });
       });
       uploads.delete(uploadId);
-      logger.success(`Upload completed: ${upload.safeFilename}`);
+      logger.success(`Upload completed:
+        File: ${upload.safeFilename}
+        Size: ${upload.fileSize}
+        Upload ID: ${uploadId}
+        Batch ID: ${batchId || 'none'}
+      `);
       
       // Send notification
       await sendNotification(upload.safeFilename, upload.fileSize, config);
+      logUploadState('After Upload Complete');
     }
 
     res.json({ 
@@ -217,7 +332,14 @@ router.post('/chunk/:uploadId', express.raw({
       progress
     });
   } catch (err) {
-    logger.error(`Chunk upload failed: ${err.message}`);
+    logger.error(`Chunk upload failed:
+      Error: ${err.message}
+      Stack: ${err.stack}
+      File: ${upload.safeFilename}
+      Upload ID: ${uploadId}
+      Batch ID: ${batchId || 'none'}
+      Bytes Received: ${upload.bytesReceived}/${upload.fileSize}
+    `);
     res.status(500).json({ error: 'Failed to process chunk' });
   }
 });
@@ -235,6 +357,7 @@ router.post('/cancel/:uploadId', async (req, res) => {
       logger.error(`Failed to delete incomplete upload: ${err.message}`);
     }
     uploads.delete(uploadId);
+    uploadToBatch.delete(uploadId);
     logger.info(`Upload cancelled: ${upload.safeFilename}`);
   }
 

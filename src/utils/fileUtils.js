@@ -1,6 +1,20 @@
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
+const { config } = require('../config');
+
+/**
+ * Get display path for logs
+ * @param {string} internalPath - Internal Docker path
+ * @returns {string} Display path for host machine
+ */
+function getDisplayPath(internalPath) {
+  if (!internalPath.startsWith(config.uploadDir)) return internalPath;
+  
+  // Replace the container path with the host path
+  const relativePath = path.relative(config.uploadDir, internalPath);
+  return path.join(config.uploadDisplayPath, relativePath);
+}
 
 /**
  * Format file size to human readable format
@@ -35,19 +49,23 @@ function formatFileSize(bytes, unit = null) {
 /**
  * Calculate total size of files in a directory
  * @param {string} directoryPath - Path to directory
- * @returns {number} Total size in bytes
+ * @returns {Promise<number>} Total size in bytes
  */
-function calculateDirectorySize(directoryPath) {
+async function calculateDirectorySize(directoryPath) {
   let totalSize = 0;
   try {
-    const files = fs.readdirSync(directoryPath);
-    files.forEach(file => {
+    const files = await fs.promises.readdir(directoryPath);
+    const fileSizePromises = files.map(async file => {
       const filePath = path.join(directoryPath, file);
-      const stats = fs.statSync(filePath);
+      const stats = await fs.promises.stat(filePath);
       if (stats.isFile()) {
-        totalSize += stats.size;
+        return stats.size;
       }
+      return 0;
     });
+    
+    const sizes = await Promise.all(fileSizePromises);
+    totalSize = sizes.reduce((acc, size) => acc + size, 0);
   } catch (err) {
     logger.error(`Failed to calculate directory size: ${err.message}`);
   }
@@ -63,13 +81,13 @@ async function ensureDirectoryExists(directoryPath) {
   try {
     if (!fs.existsSync(directoryPath)) {
       await fs.promises.mkdir(directoryPath, { recursive: true });
-      logger.info(`Created directory: ${directoryPath}`);
+      logger.info(`Created directory: ${getDisplayPath(directoryPath)}`);
     }
     await fs.promises.access(directoryPath, fs.constants.W_OK);
-    logger.success(`Directory is writable: ${directoryPath}`);
+    logger.success(`Directory is writable: ${getDisplayPath(directoryPath)}`);
   } catch (err) {
     logger.error(`Directory error: ${err.message}`);
-    throw new Error(`Failed to access or create directory: ${directoryPath}`);
+    throw new Error(`Failed to access or create directory: ${getDisplayPath(directoryPath)}`);
   }
 }
 
@@ -101,6 +119,9 @@ async function getUniqueFilePath(filePath) {
       }
     }
   }
+  
+  // Log using display path
+  logger.info(`Using unique path: ${getDisplayPath(finalPath)}`);
   return { path: finalPath, handle: fileHandle };
 }
 

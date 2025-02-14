@@ -14,4 +14,3 @@ services:
             MAX_FILE_SIZE: 1024 # Replace "1024" with the maximum file size you want to allow in MB
             DUMBDROP_PIN: 123456 # Replace "123456" with the pin you want to use 
             AUTO_UPLOAD: false # Set to true if you want dont want to have to click the upload button
-            APPRISE_URL: "" # Add your Apprise URL here if you want notifications

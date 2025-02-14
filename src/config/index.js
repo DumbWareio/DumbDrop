@@ -1,6 +1,34 @@
 require('dotenv').config();
 const { validatePin } = require('../utils/security');
 const logger = require('../utils/logger');
+const fs = require('fs');
+
+/**
+ * Get the host path from Docker mount point
+ * @returns {string} Host path or fallback to container path
+ */
+function getHostPath() {
+  try {
+    // Read Docker mountinfo to get the host path
+    const mountInfo = fs.readFileSync('/proc/self/mountinfo', 'utf8');
+    const lines = mountInfo.split('\n');
+    
+    // Find the line containing our upload directory
+    const uploadMount = lines.find(line => line.includes('/app/uploads'));
+    if (uploadMount) {
+      // Extract the host path from the mount info
+      const parts = uploadMount.split(' ');
+      // The host path is typically in the 4th space-separated field
+      const hostPath = parts[3];
+      return hostPath;
+    }
+  } catch (err) {
+    logger.debug('Could not determine host path from mount info');
+  }
+  
+  // Fallback to container path if we can't determine host path
+  return '/app/uploads';
+}
 
 /**
  * Application configuration
@@ -12,7 +40,8 @@ const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   
   // Upload settings
-  uploadDir: process.env.UPLOAD_DIR || './uploads',
+  uploadDir: '/app/uploads', // Internal Docker path
+  uploadDisplayPath: getHostPath(), // Dynamically determined from Docker mount
   maxFileSize: (() => {
     const sizeInMB = parseInt(process.env.MAX_FILE_SIZE || '1024', 10);
     if (isNaN(sizeInMB) || sizeInMB <= 0) {
