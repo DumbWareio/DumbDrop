@@ -2,8 +2,13 @@ services:
   app:
     build:
       context: ..
-      dockerfile: Dockerfile
+      dockerfile: dev/Dockerfile.dev
       target: development
+      args:
+        DOCKER_BUILDKIT: 1
+      x-bake:
+        options:
+          dockerignore: dev/.dockerignore
     volumes:
       - ..:/usr/src/app
       - /usr/src/app/node_modules

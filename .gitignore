@@ -149,6 +149,8 @@ Thumbs.db
 # Development
 dev/*
 !dev/docker-compose.dev.yml
+!dev/Dockerfile.dev
+!dev/.dockerignore
 !dev/dev.sh
 !dev/README.md
 

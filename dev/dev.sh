@@ -3,6 +3,9 @@
 # Set script to exit on error
 set -e
 
+# Enable Docker BuildKit
+export DOCKER_BUILDKIT=1
+
 # Colors for pretty output
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'

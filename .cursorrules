@@ -78,6 +78,31 @@
 - Complex logic must include comments explaining "why" not "what"
 - JSDoc comments for public functions and APIs
 
+# Docker Configuration
+- Use environment-specific .dockerignore files:
+  - .dockerignore: Production defaults (most restrictive)
+  - dev/.dockerignore: Development-specific (allows test/dev files)
+- Production .dockerignore should exclude:
+  - All test files and configurations
+  - Development-only dependencies
+  - Documentation and non-essential files
+  - Local development configurations
+- Development .dockerignore should:
+  - Allow test files and configurations
+  - Allow development dependencies
+  - Still exclude node_modules and sensitive files
+  - Keep Docker-specific files excluded
+- Docker Compose configurations:
+  - Production: docker-compose.yml in root
+  - Development: docker-compose.dev.yml in /dev
+  - Use BuildKit features when needed
+  - Document any special build arguments
+- Multi-stage builds:
+  - Use appropriate base images
+  - Minimize final image size
+  - Separate development and production stages
+  - Use specific version tags for base images
+
 # Code Style
 - Follow ESLint and Prettier configurations
 - Use meaningful variable and function names
