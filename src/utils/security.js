@@ -1,6 +1,5 @@
 const crypto = require('crypto');
 const logger = require('./logger');
-const { config } = require('../config');
 
 /**
  * Store for login attempts with rate limiting

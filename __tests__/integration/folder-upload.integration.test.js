@@ -88,7 +88,6 @@ describe('Folder Upload Integration', () => {
 
     test('should handle complete folder upload with structure', async () => {
         const sourceRoot = path.join(TEST_CONFIG.uploadDir, 'test-source/test-folder');
-        const batchId = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
         
         // Get all files recursively
         async function* getFiles(dir) {
@@ -110,20 +109,31 @@ describe('Folder Upload Integration', () => {
                 file.path,
                 path.join('test-folder', file.relativePath).replace(/\\/g, '/')
             );
+            if (!uploadResponse || !uploadResponse.body) {
+                throw new Error('Upload response or body is missing');
+            }
             expect(uploadResponse.body.progress).toBe(100);
         }
 
         // Verify uploaded files
+        async function verifyFile(fullPath, expectedContent) {
+            const uploadedContent = await fs.readFile(fullPath, 'utf8');
+            expect(uploadedContent).toBe(expectedContent);
+        }
+
+        async function verifyDirectory(fullPath, content) {
+            const stats = await fs.stat(fullPath);
+            expect(stats.isDirectory()).toBe(true);
+            await verifyFolder(fullPath, content);
+        }
+
         async function verifyFolder(dir, expectedStructure) {
             for (const [name, content] of Object.entries(expectedStructure)) {
                 const fullPath = path.join(dir, name);
                 if (typeof content === 'string') {
-                    const uploadedContent = await fs.readFile(fullPath, 'utf8');
-                    expect(uploadedContent).toBe(content);
+                    await verifyFile(fullPath, content);
                 } else {
-                    const stats = await fs.stat(fullPath);
-                    expect(stats.isDirectory()).toBe(true);
-                    await verifyFolder(fullPath, content);
+                    await verifyDirectory(fullPath, content);
                 }
             }
         }

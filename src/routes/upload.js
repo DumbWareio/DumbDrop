@@ -7,7 +7,6 @@ const logger = require('../utils/logger');
 const { getUniqueFilePath, getUniqueFolderPath } = require('../utils/fileUtils');
 const { sendNotification } = require('../services/notifications');
 const fs = require('fs');
-const multer = require('multer');
 const { cleanupIncompleteUploads } = require('../utils/cleanup');
 
 // Store ongoing uploads

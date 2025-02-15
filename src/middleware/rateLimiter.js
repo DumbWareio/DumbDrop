@@ -27,7 +27,7 @@ const initUploadLimiter = createLimiter({
   standardHeaders: true,
   legacyHeaders: false,
   // Skip rate limiting for chunk uploads within an existing batch
-  skip: (req, res) => {
+  skip: (req) => {
     return req.headers['x-batch-id'] !== undefined;
   }
 });

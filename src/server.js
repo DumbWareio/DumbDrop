@@ -49,7 +49,7 @@ async function startServer() {
       // Start a shorter force shutdown timer
       const forceShutdownTimer = setTimeout(() => {
         logger.error('Force shutdown initiated');
-        process.exit(1);
+        throw new Error('Force shutdown due to timeout');
       }, 3000); // 3 seconds maximum for total shutdown
       
       try {
@@ -82,10 +82,9 @@ async function startServer() {
         // Clear the force shutdown timer since we completed gracefully
         clearTimeout(forceShutdownTimer);
         process.exitCode = 0;
-        process.exit(0); // Exit immediately since we're done
       } catch (error) {
         logger.error(`Error during shutdown: ${error.message}`);
-        process.exit(1);
+        throw error;
       }
     };
 
@@ -104,7 +103,8 @@ async function startServer() {
 if (require.main === module) {
   startServer().catch((error) => {
     logger.error('Server failed to start:', error);
-    process.exit(1);
+    process.exitCode = 1;
+    throw error;
   });
 }
 
