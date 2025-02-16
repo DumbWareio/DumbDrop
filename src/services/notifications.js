@@ -27,7 +27,8 @@ async function sendNotification(filename, fileSize, config) {
 
   try {
     const formattedSize = formatFileSize(fileSize, APPRISE_SIZE_UNIT);
-    const totalStorage = formatFileSize(calculateDirectorySize(uploadDir));
+    const dirSize = await calculateDirectorySize(uploadDir);
+    const totalStorage = formatFileSize(dirSize);
     
     // Sanitize the message components
     const sanitizedFilename = JSON.stringify(filename).slice(1, -1);
