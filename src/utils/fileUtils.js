@@ -53,7 +53,7 @@ function formatFileSize(bytes, unit = null) {
 }
 
 /**
- * Calculate total size of files in a directory
+ * Calculate total size of files in a directory recursively
  * @param {string} directoryPath - Path to directory
  * @returns {Promise<number>} Total size in bytes
  */
@@ -66,6 +66,9 @@ async function calculateDirectorySize(directoryPath) {
       const stats = await fs.promises.stat(filePath);
       if (stats.isFile()) {
         return stats.size;
+      } else if (stats.isDirectory()) {
+        // Recursively calculate size for subdirectories
+        return await calculateDirectorySize(filePath);
       }
       return 0;
     });
