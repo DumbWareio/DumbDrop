@@ -57,42 +57,14 @@ global.console = {
 
 let server;
 
-// Initialize app before all tests
-beforeAll(async () => {
-  try {
-    // Create test upload directory
-    await fs.mkdir(TEST_CONFIG.uploadDir, { recursive: true });
-    
-    // Initialize the app
-    await initialize();
-    
-    // Start server
-    server = app.listen(TEST_CONFIG.port);
-  } catch (err) {
-    console.error('Test setup failed:', err);
-    throw err;
-  }
-});
-
-// Reset environment before each test
-beforeEach(async () => {
-  // Reset mocks
-  jest.clearAllMocks();
-  
-  // Ensure upload directory exists
-  await fs.mkdir(TEST_CONFIG.uploadDir, { recursive: true });
-});
-
-/**
- * Recursively remove a directory and its contents
- * @param {string} dir - Directory to remove
- */
+// Helper function to recursively remove directory
 async function removeDir(dir) {
   try {
-    const entries = await fs.readdir(dir, { withFileTypes: true });
+    const entries = await fs.readdir(dir);
     await Promise.all(entries.map(async entry => {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
+      const fullPath = path.join(dir, entry);
+      const stat = await fs.stat(fullPath);
+      if (stat.isDirectory()) {
         await removeDir(fullPath);
       } else {
         await fs.unlink(fullPath);
@@ -106,8 +78,29 @@ async function removeDir(dir) {
   }
 }
 
-// Clean up test files after each test
-afterEach(async () => {
+// Initialize app and server before all tests
+beforeAll(async () => {
+  try {
+    // Create test upload directory
+    await fs.mkdir(TEST_CONFIG.uploadDir, { recursive: true });
+    
+    // Initialize the app
+    await initialize();
+    
+    // Start server only once
+    server = app.listen(TEST_CONFIG.port);
+  } catch (err) {
+    console.error('Test setup failed:', err);
+    throw err;
+  }
+});
+
+// Reset environment before each test
+beforeEach(async () => {
+  // Reset mocks
+  jest.clearAllMocks();
+  
+  // Clean and recreate upload directory
   await removeDir(TEST_CONFIG.uploadDir);
   await fs.mkdir(TEST_CONFIG.uploadDir, { recursive: true });
 });
@@ -125,4 +118,10 @@ afterAll(async () => {
   
   // Remove test directory
   await removeDir(TEST_CONFIG.uploadDir);
-}); 
+});
+
+// Export test config for use in test files
+module.exports = {
+  TEST_CONFIG,
+  removeDir
+}; 
