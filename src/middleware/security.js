@@ -57,13 +57,16 @@ function requirePin(PIN) {
     // Check header as fallback
     const headerPin = req.headers['x-pin'];
     if (headerPin && safeCompare(headerPin, PIN)) {
-      // Set cookie for subsequent requests
-      res.cookie('DUMBDROP_PIN', headerPin, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+      // Set cookie for subsequent requests with enhanced security
+      const cookieOptions = {
+        httpOnly: true, // Always enable HttpOnly
+        secure: req.secure || req.headers['x-forwarded-proto'] === 'https', // Enable secure flag only if the request is over HTTPS
         sameSite: 'strict',
-        path: '/'
-      });
+        path: '/',
+        maxAge: 24 * 60 * 60 * 1000 // 24 hour expiry
+      };
+      
+      res.cookie('DUMBDROP_PIN', headerPin, cookieOptions);
       return next();
     }
 

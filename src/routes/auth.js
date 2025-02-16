@@ -9,7 +9,7 @@ const {
   recordAttempt, 
   resetAttempts,
   MAX_ATTEMPTS,
-  LOCKOUT_TIME 
+  LOCKOUT_DURATION 
 } = require('../utils/security');
 
 /**
@@ -44,7 +44,7 @@ router.post('/verify-pin', (req, res) => {
     if (isLockedOut(ip)) {
       const attempts = recordAttempt(ip);
       const timeLeft = Math.ceil(
-        (LOCKOUT_TIME - (Date.now() - attempts.lastAttempt)) / 1000 / 60
+        (LOCKOUT_DURATION - (Date.now() - attempts.lastAttempt)) / 1000 / 60
       );
       
       logger.warn(`Login attempt from locked out IP: ${ip}`);
