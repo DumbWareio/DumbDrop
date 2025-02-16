@@ -1,13 +1,11 @@
 {
   "env": {
     "node": true,
-    "es2022": true,
-    "jest": true
+    "es2022": true
   },
   "extends": [
     "eslint:recommended",
     "plugin:node/recommended",
-    "plugin:jest/recommended",
     "prettier"
   ],
   "parserOptions": {
@@ -23,13 +21,5 @@
     "node/prefer-global/url": ["error", "always"],
     "node/prefer-promises/dns": "error",
     "node/prefer-promises/fs": "error"
-  },
-  "overrides": [
-    {
-      "files": ["**/__tests__/**/*.[jt]s?(x)", "**/?(*.)+(spec|test).[jt]s?(x)"],
-      "rules": {
-        "node/no-unpublished-require": "off"
-      }
-    }
-  ]
+  }
 } 

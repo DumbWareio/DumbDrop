@@ -54,10 +54,6 @@ case "$1" in
         print_message "Opening shell in container..."
         docker compose -f docker-compose.dev.yml exec app sh
         ;;
-    "test")
-        print_message "Running tests..."
-        docker compose -f docker-compose.dev.yml exec app npm test --detectOpenHandles
-        ;;
     "lint")
         print_message "Running linter..."
         docker compose -f docker-compose.dev.yml exec app npm run lint
@@ -73,7 +69,6 @@ case "$1" in
         echo "  rebuild   - Rebuild container without cache and start"
         echo "  clean     - Clean up everything (containers, volumes, env)"
         echo "  shell     - Open shell in container"
-        echo "  test      - Run tests"
         echo "  lint      - Run linter"
         ;;
 esac 

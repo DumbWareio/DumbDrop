@@ -60,13 +60,6 @@ DumbDrop/
 
 4. Push and create pull request
 
-## Testing
-
-Run tests locally:
-```bash
-npm test
-```
-
 ## Debugging
 
 - Use `DEBUG=dumbdrop:*` for detailed logs
