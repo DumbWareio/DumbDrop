@@ -112,11 +112,15 @@ router.post('/init', async (req, res) => {
 
   try {
     // Log request details for debugging
-    logger.info(`Upload init request:
-      Filename: ${filename}
-      Size: ${fileSize} (${typeof fileSize})
-      Batch ID: ${clientBatchId || 'none'}
-    `);
+    if (process.env.DEBUG === 'true' || process.env.NODE_ENV === 'development') {
+      logger.info(`Upload init request:
+        Filename: ${filename}
+        Size: ${fileSize} (${typeof fileSize})
+        Batch ID: ${clientBatchId || 'none'}
+      `);
+    } else {
+      logger.info(`Upload init request: ${filename} (${fileSize} bytes)`);
+    }
 
     // Validate required fields with detailed errors
     if (!filename) {
@@ -323,7 +327,7 @@ router.post('/chunk/:uploadId', express.raw({
       100
     );
     
-    logger.info(`Chunk received:
+    logger.debug(`Chunk received:
       File: ${upload.safeFilename}
       Progress: ${progress}%
       Bytes Received: ${upload.bytesReceived}/${upload.fileSize}
@@ -341,12 +345,18 @@ router.post('/chunk/:uploadId', express.raw({
         });
       });
       uploads.delete(uploadId);
-      logger.success(`Upload completed:
-        File: ${upload.safeFilename}
-        Size: ${upload.fileSize}
-        Upload ID: ${uploadId}
-        Batch ID: ${batchId || 'none'}
-      `);
+      
+      // Format completion message based on debug mode
+      if (process.env.DEBUG === 'true' || process.env.NODE_ENV === 'development') {
+        logger.success(`Upload completed:
+          File: ${upload.safeFilename}
+          Size: ${upload.fileSize}
+          Upload ID: ${uploadId}
+          Batch ID: ${batchId || 'none'}
+        `);
+      } else {
+        logger.success(`Upload completed: ${upload.safeFilename} (${upload.fileSize} bytes)`);
+      }
       
       // Send notification
       await sendNotification(upload.safeFilename, upload.fileSize, config);
