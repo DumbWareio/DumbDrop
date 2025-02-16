@@ -2,7 +2,7 @@
 
 A stupid simple file upload application that provides a clean, modern interface for dragging and dropping files. Built with Node.js and vanilla JavaScript.
 
-![image](https://github.com/user-attachments/assets/346a4cf8-5e89-4b1f-bb1f-4ea8603230eb)
+![DumbDrop](https://github.com/user-attachments/assets/1b909d26-9ead-4dc7-85bc-8bfda0d366c1)
 
 No auth (unless you want it now!), no storage, no nothing. Just a simple file uploader to drop dumb files into a dumb folder.
 
