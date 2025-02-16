@@ -187,17 +187,22 @@ button:disabled {
     font-size: 0.9rem;
 }
 
-.progress-info {
+.progress-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     font-size: 0.8rem;
     color: var(--text-color);
     opacity: 0.8;
+    margin-top: 8px;
 }
 
-.progress-path {
-    color: var(--text-color);
-    opacity: 0.9;
-    font-weight: 500;
-    word-break: break-all;
+.progress-info {
+    text-align: left;
+}
+
+.progress-details {
+    text-align: right;
 }
 
 .progress {
@@ -213,19 +218,6 @@ button:disabled {
     height: 100%;
     background: var(--highlight-color);
     transition: width 0.3s ease;
-}
-
-.progress-status {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.8rem;
-    color: var(--text-color);
-    opacity: 0.8;
-}
-
-.progress-details {
-    text-align: right;
 }
 
 /* Modal Styles */

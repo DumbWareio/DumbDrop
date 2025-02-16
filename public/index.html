@@ -76,6 +76,9 @@
                 this.position = 0;
                 this.progressElement = null;
                 this.chunkSize = 1024 * 1024; // 1MB chunks
+                this.lastUploadedBytes = 0;
+                this.lastUploadTime = null;
+                this.uploadRate = 0;
             }
 
             async start() {
@@ -111,7 +114,7 @@
                     headers['X-Batch-ID'] = this.batchId;
                 }
 
-                const response = await fetch('/upload/init', {
+                const response = await fetch('/api/upload/init', {
                     method: 'POST',
                     headers,
                     body: JSON.stringify({
@@ -147,7 +150,7 @@
             }
 
             async uploadChunk(chunk) {
-                const response = await fetch(`/upload/chunk/${this.uploadId}`, {
+                const response = await fetch(`/api/upload/chunk/${this.uploadId}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/octet-stream',
@@ -178,23 +181,64 @@
                 const bar = document.createElement('div');
                 bar.className = 'progress-bar';
                 
+                const status = document.createElement('div');
+                status.className = 'progress-status';
+                
                 const info = document.createElement('div');
                 info.className = 'progress-info';
+                
+                const details = document.createElement('div');
+                details.className = 'progress-details';
 
+                status.appendChild(info);
+                status.appendChild(details);
+                
                 progress.appendChild(bar);
                 container.appendChild(label);
                 container.appendChild(progress);
-                container.appendChild(info);
+                container.appendChild(status);
                 
                 document.getElementById('uploadProgress').appendChild(container);
-                this.progressElement = { container, bar, infoSpan: info };
+                this.progressElement = { container, bar, infoSpan: info, detailsSpan: details };
+                this.lastUploadTime = Date.now();
             }
 
             updateProgress(percent) {
                 if (this.progressElement) {
                     this.progressElement.bar.style.width = `${percent}%`;
-                    this.progressElement.infoSpan.textContent = 
-                        `${formatFileSize(this.file.size)} - ${percent.toFixed(1)}%`;
+                    
+                    // Calculate upload rate
+                    const currentTime = Date.now();
+                    const timeDiff = (currentTime - this.lastUploadTime) / 1000; // Convert to seconds
+                    const bytesDiff = this.position - this.lastUploadedBytes;
+                    
+                    if (timeDiff > 0) {
+                        this.uploadRate = bytesDiff / timeDiff; // bytes per second
+                    }
+                    
+                    // Format upload rate
+                    let rateText = '0.0 B/s';
+                    if (this.uploadRate > 0) {
+                        const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+                        let unitIndex = 0;
+                        let rate = this.uploadRate;
+                        
+                        while (rate >= 1024 && unitIndex < units.length - 1) {
+                            rate /= 1024;
+                            unitIndex++;
+                        }
+                        
+                        rateText = `${rate.toFixed(1)} ${units[unitIndex]}`;
+                    }
+                    
+                    // Update progress info
+                    this.progressElement.infoSpan.textContent = `${rateText} · ${percent < 100 ? 'uploading...' : 'complete'}`;
+                    this.progressElement.detailsSpan.textContent = 
+                        `${formatFileSize(this.position)} of ${formatFileSize(this.file.size)} (${percent.toFixed(1)}%)`;
+                    
+                    // Update tracking variables
+                    this.lastUploadedBytes = this.position;
+                    this.lastUploadTime = currentTime;
 
                     if (percent === 100) {
                         setTimeout(() => {

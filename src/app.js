@@ -61,7 +61,7 @@ app.get('/login.html', (req, res) => {
 app.use(express.static('public'));
 
 // Error handling middleware
-app.use((err, req, res) => {
+app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   logger.error(`Unhandled error: ${err.message}`);
   res.status(500).json({ 
     message: 'Internal server error', 
