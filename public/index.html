@@ -111,7 +111,7 @@
                     headers['X-Batch-ID'] = this.batchId;
                 }
 
-                const response = await fetch('/api/upload/init', {
+                const response = await fetch('/upload/init', {
                     method: 'POST',
                     headers,
                     body: JSON.stringify({
@@ -147,7 +147,7 @@
             }
 
             async uploadChunk(chunk) {
-                const response = await fetch(`/api/upload/chunk/${this.uploadId}`, {
+                const response = await fetch(`/upload/chunk/${this.uploadId}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/octet-stream',
