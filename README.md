@@ -6,7 +6,21 @@ A stupid simple file upload application that provides a clean, modern interface 
 
 No auth (unless you want it now!), no storage, no nothing. Just a simple file uploader to drop dumb files into a dumb folder.
 
+## Table of Contents
+- [Quick Start](#quick-start)
+- [Features](#features)
+- [Configuration](#configuration)
+- [Security](#security)
+- [Development](#development)
+- [Technical Details](#technical-details)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Quick Start
+
+### Prerequisites
+- Docker (recommended)
+- Node.js >=20.0.0 (for local development)
 
 ### Option 1: Docker (For Dummies)
 ```bash
@@ -77,16 +91,18 @@ docker run -p 3000:3000 -v "${PWD}\local_uploads:/app/uploads" dumbwareio/dumbdr
 
 ## Features
 
-- Drag and drop file uploads
-- Multiple file selection
-- Clean, responsive UI
-- File size display
-- Docker support
-- Dark Mode toggle
-- Configurable file size limits
-- Drag and Drop Directory Support (Maintains file structure in upload)
-- Optional PIN protection (4-10 digits) with secure validation
-- Configurable notifications via Apprise
+- 🚀 Drag and drop file uploads
+- 📁 Multiple file selection
+- 🎨 Clean, responsive UI with Dark Mode
+- 📦 Docker support with easy configuration
+- 📂 Directory upload support (maintains structure)
+- 🔒 Optional PIN protection
+- 📱 Mobile-friendly interface
+- 🔔 Configurable notifications via Apprise
+- ⚡ Zero dependencies on client-side
+- 🛡️ Built-in security features
+- 💾 Configurable file size limits
+- 🎯 File extension filtering
 
 ## Configuration
 
@@ -136,27 +152,50 @@ Both {size} and {storage} use the same formatting rules based on APPRISE_SIZE_UN
 - Customizable notification messages with filename templating
 - Optional - disabled if no APPRISE_URL is set
 
-## Security Features
+## Security
 
+### Features
 - Variable-length PIN support (4-10 digits)
-- Constant-time PIN comparison to prevent timing attacks
-- Automatic input sanitization
-- Secure PIN validation middleware
-- No PIN storage in browser (memory only)
-- Rate Limiting to prevent brute force attacks
-- Optional file extension filtering
-
-## Development
-
-Want to contribute or develop locally? Check out our [Development Guide](dev/README.md) - it's stupid simple, just the way we like it! If you're writing complex code to solve a simple problem, you're probably doing it wrong. Keep it dumb, keep it simple.
+- Constant-time PIN comparison
+- Input sanitization
+- Rate limiting
+- File extension filtering
+- No client-side PIN storage
+- Secure file handling
 
 ## Technical Details
 
-- Backend: Node.js with Express
-- Frontend: Vanilla JavaScript with modern drag-and-drop API
-- File handling: Chunked file uploads with configurable size limits
-- Security: Optional PIN protection for uploads
-- Containerization: Docker with automated builds via GitHub Actions
+### Stack
+- **Backend**: Node.js (>=20.0.0) with Express
+- **Frontend**: Vanilla JavaScript (ES6+)
+- **Container**: Docker with multi-stage builds
+- **Security**: Express security middleware
+- **Upload**: Chunked file handling via Multer
+- **Notifications**: Apprise integration
+
+### Dependencies
+- express: Web framework
+- multer: File upload handling
+- apprise: Notification system
+- cors: Cross-origin resource sharing
+- dotenv: Environment configuration
+- express-rate-limit: Rate limiting
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes using conventional commits
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+See [Development Guide](dev/README.md) for local setup and guidelines.
+
+
+
+
+---
+Made with ❤️ by [DumbWare.io](https://dumbware.io)
 
 ## Future Features
 - Camera Upload for Mobile

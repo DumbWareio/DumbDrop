@@ -1,16 +1,22 @@
 services:
     dumbdrop:
-        # image: dumbwareio/dumbdrop:latest
-        build:
-            context: .
-            dockerfile: Dockerfile
+        image: dumbwareio/dumbdrop:latest
         ports:
             - 3000:3000
         volumes:
             # Replace "./local_uploads" ( before the colon ) with the path where the files land
             - ./local_uploads:/app/uploads 
-        environment:
-            DUMBDROP_TITLE: DumbDrop # Replace "DumbDrop" with the title you want to display
-            MAX_FILE_SIZE: 1024 # Replace "1024" with the maximum file size you want to allow in MB
-            DUMBDROP_PIN: 123456 # Replace "123456" with the pin you want to use 
-            AUTO_UPLOAD: false # Set to true if you want dont want to have to click the upload button
+        environment:  # Environment variables for the DumbDrop service
+            DUMBDROP_TITLE: DumbDrop  # The title shown in the web interface
+            MAX_FILE_SIZE: 1024  # Maximum file size in MB
+            DUMBDROP_PIN: 123456  # Optional PIN protection (4-10 digits, leave empty to disable)
+            AUTO_UPLOAD: true  # Upload without clicking button
+
+            # Additional available environment variables (commented out with defaults)
+            # PORT: 3000  # Server port (default: 3000)
+            # NODE_ENV: production  # Node environment (development/production)
+            # DEBUG: false  # Debug mode for verbose logging (default: false in production, true in development)
+            # APPRISE_URL: ""  # Apprise notification URL for upload notifications (default: none)
+            # APPRISE_MESSAGE: "New file uploaded - {filename} ({size}), Storage used {storage}"  # Notification message template with placeholders: {filename}, {size}, {storage}
+            # APPRISE_SIZE_UNIT: "Auto"  # Size unit for notifications (B, KB, MB, GB, TB, or Auto)
+            # ALLOWED_EXTENSIONS: ".jpg,.jpeg,.png,.pdf,.doc,.docx,.txt"  # Comma-separated list of allowed file extensions (default: all allowed)

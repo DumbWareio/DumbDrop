@@ -38,7 +38,7 @@ body {
     background: var(--bg-color);
     display: flex;
     justify-content: center;
-    align-items: center;
+    padding-top: 2rem;
     color: var(--text-color);
     transition: background-color 0.3s ease, color 0.3s ease;
 }
