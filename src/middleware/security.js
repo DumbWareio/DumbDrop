@@ -1,3 +1,9 @@
+/**
+ * Security middleware implementations for HTTP-level protection.
+ * Sets security headers (CSP, HSTS) and implements PIN-based authentication.
+ * Provides Express middleware for securing routes and responses.
+ */
+
 const { safeCompare } = require('../utils/security');
 const logger = require('../utils/logger');
 

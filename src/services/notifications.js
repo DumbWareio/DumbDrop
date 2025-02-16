@@ -1,3 +1,9 @@
+/**
+ * Notification service for file upload events.
+ * Integrates with Apprise for sending notifications about uploads.
+ * Handles message formatting and notification delivery.
+ */
+
 const { exec } = require('child_process');
 const util = require('util');
 const { formatFileSize, calculateDirectorySize } = require('../utils/fileUtils');

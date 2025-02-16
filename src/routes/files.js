@@ -1,3 +1,9 @@
+/**
+ * File management and listing route handlers.
+ * Provides endpoints for listing, downloading, and managing uploaded files.
+ * Handles file metadata, stats, and directory operations.
+ */
+
 const express = require('express');
 const router = express.Router();
 const path = require('path');

@@ -1,3 +1,21 @@
+/**
+ * Cursor rules for maintaining code quality and consistency
+ */
+
+{
+  "rules": {
+    "file-header-docs": {
+      "description": "All source files must have a header comment explaining their purpose",
+      "pattern": "src/**/*.js",
+      "check": {
+        "type": "regex",
+        "value": "^/\\*\\*\\n \\* [^\\n]+\\n \\* [^\\n]+\\n \\* [^\\n]+\\n \\*/\\n",
+        "message": "File must start with a header comment block (3 lines) explaining its purpose"
+      }
+    }
+  }
+}
+
 # Project Principles
 
 # Code Philosophy

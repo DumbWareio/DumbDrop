@@ -1,3 +1,9 @@
+/**
+ * Server entry point that starts the HTTP server and manages connections.
+ * Handles graceful shutdown, connection tracking, and server initialization.
+ * Provides development mode directory listing functionality.
+ */
+
 const { app, initialize, config } = require('./app');
 const logger = require('./utils/logger');
 const fs = require('fs');

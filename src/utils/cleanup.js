@@ -1,3 +1,9 @@
+/**
+ * Cleanup utilities for managing application resources.
+ * Handles incomplete uploads, empty folders, and shutdown tasks.
+ * Provides cleanup task registration and execution system.
+ */
+
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');

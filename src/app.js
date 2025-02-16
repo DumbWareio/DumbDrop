@@ -1,3 +1,9 @@
+/**
+ * Main application setup and configuration.
+ * Initializes Express app, middleware, routes, and static file serving.
+ * Handles core application bootstrapping and configuration validation.
+ */
+
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');

@@ -1,3 +1,9 @@
+/**
+ * File system utility functions for file operations.
+ * Handles file paths, sizes, directory operations, and path mapping.
+ * Provides helper functions for file system operations.
+ */
+
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');

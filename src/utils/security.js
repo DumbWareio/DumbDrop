@@ -1,3 +1,9 @@
+/**
+ * Core security utilities for authentication and protection.
+ * Implements rate limiting, PIN validation, and secure string comparison.
+ * Manages login attempts and security-related cleanup tasks.
+ */
+
 const crypto = require('crypto');
 const logger = require('./logger');
 

@@ -1,3 +1,9 @@
+/**
+ * File upload route handlers and batch upload management.
+ * Handles file uploads, chunked transfers, and folder creation.
+ * Manages upload sessions, batch timeouts, and cleanup.
+ */
+
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
