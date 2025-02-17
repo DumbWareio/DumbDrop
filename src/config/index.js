@@ -38,6 +38,7 @@ const config = {
   // Server settings
   port: process.env.PORT || 3000,
   nodeEnv: process.env.NODE_ENV || 'development',
+  baseUrl: process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`,
   
   // Upload settings
   uploadDir: '/app/uploads', // Internal Docker path
@@ -74,6 +75,13 @@ function validateConfig() {
   
   if (config.maxFileSize <= 0) {
     errors.push('MAX_FILE_SIZE must be greater than 0');
+  }
+
+  // Validate BASE_URL format
+  try {
+    new URL(config.baseUrl);
+  } catch (err) {
+    errors.push('BASE_URL must be a valid URL');
   }
   
   if (config.nodeEnv === 'production') {

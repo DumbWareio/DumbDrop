@@ -11,6 +11,7 @@ services:
             MAX_FILE_SIZE: 1024  # Maximum file size in MB
             DUMBDROP_PIN: 123456  # Optional PIN protection (4-10 digits, leave empty to disable)
             AUTO_UPLOAD: true  # Upload without clicking button
+            BASE_URL: http://localhost:3000  # The base URL for the application
 
             # Additional available environment variables (commented out with defaults)
             # PORT: 3000  # Server port (default: 3000)

@@ -51,6 +51,8 @@ services:
             DUMBDROP_PIN: 123456
             # Upload without clicking button
             AUTO_UPLOAD: false
+            # The base URL for the application
+            BASE_URL: http://localhost:3000
 ```
 
 Then run:
@@ -111,6 +113,7 @@ docker run -p 3000:3000 -v "${PWD}\local_uploads:/app/uploads" dumbwareio/dumbdr
 | Variable          | Description                           | Default | Required |
 |------------------|---------------------------------------|---------|----------|
 | PORT             | Server port                           | 3000    | No       |
+| BASE_URL         | Base URL for the application          | http://localhost:PORT | No |
 | MAX_FILE_SIZE    | Maximum file size in MB               | 1024    | No       |
 | DUMBDROP_PIN     | PIN protection (4-10 digits)          | None    | No       |
 | DUMBDROP_TITLE   | Site title displayed in header        | DumbDrop| No       |
