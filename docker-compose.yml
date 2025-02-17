@@ -12,7 +12,7 @@ services:
             DUMBDROP_PIN: 123456  # Optional PIN protection (4-10 digits, leave empty to disable)
             AUTO_UPLOAD: true  # Upload without clicking button
             BASE_URL: http://localhost:3000  # The base URL for the application
-
+            
             # Additional available environment variables (commented out with defaults)
             # PORT: 3000  # Server port (default: 3000)
             # NODE_ENV: production  # Node environment (development/production)
