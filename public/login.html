@@ -209,38 +209,35 @@
         };
 
         // Check PIN length and initialize
-        const initialize = async () => {
-            fetch('/api/auth/pin-required')
-                .then(response => {
-                    if (!response.ok) {
-                        if (response.status === 429 && response.statusText.includes("Too Many Requests")) {
-                            // If rate limit is hit, show error instead of retrying
-                            document.getElementById('pin-error').textContent = response.error;
-                            return Promise.reject('Rate limit hit');
-                        }
-                        throw new Error(`Rate limit hit: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data.required) {
-                        pinLength = data.length;
-                        createPinInputs(pinLength);
-                        setupPinHandling();
-                    } else {
-                        window.location.href = '/';
-                    }
-                })
-                .catch(err => {
-                    console.error('Error checking PIN requirement:', err);
-                    const errorMessage = err && err.includes('Rate limit hit')
-                        ? 'Too many PIN verification attempts. Account locked for 15 minutes.'
-                        : 'Error checking PIN requirement';
-                    document.getElementById('pin-error').textContent = errorMessage;
-                });
-        }
-
-        initialize();
+        fetch('/api/auth/pin-required')
+            .then(response => {
+                if (response.status === 429) {
+                    throw new Error('Too many attempts. Please wait before trying again.');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.required) {
+                    pinLength = data.length;
+                    createPinInputs(pinLength);
+                    setupPinHandling();
+                } else {
+                    window.location.href = '/';
+                }
+            })
+            .catch(err => {
+                console.error('Error checking PIN requirement:', err);
+                const errorMessage = err.message === 'Too many attempts. Please wait before trying again.' 
+                    ? err.message 
+                    : 'Error checking PIN requirement';
+                document.getElementById('pin-error').textContent = errorMessage;
+                // Prevent refresh loop by disabling the PIN input form
+                const pinContainer = document.getElementById('pin-container');
+                if (pinContainer) {
+                    pinContainer.style.opacity = '0.5';
+                    pinContainer.style.pointerEvents = 'none';
+                }
+            });
     </script>
 </body>
 

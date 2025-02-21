@@ -53,12 +53,36 @@ app.get('/', (req, res) => {
 
 // Login route
 app.get('/login.html', (req, res) => {
+  // Add cache control headers
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  
   let html = fs.readFileSync(path.join(__dirname, '../public', 'login.html'), 'utf8');
   html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
   res.send(html);
 });
 
-// Serve static files
+// Serve static files with template variable replacement for HTML files
+app.use((req, res, next) => {
+  if (!req.path.endsWith('.html')) {
+    return next();
+  }
+  
+  try {
+    const filePath = path.join(__dirname, '../public', req.path);
+    let html = fs.readFileSync(filePath, 'utf8');
+    html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
+    if (req.path === 'index.html') {
+      html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
+    }
+    res.send(html);
+  } catch (err) {
+    next();
+  }
+});
+
+// Serve remaining static files
 app.use(express.static('public'));
 
 // Error handling middleware
