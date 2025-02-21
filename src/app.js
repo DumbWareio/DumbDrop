@@ -14,6 +14,7 @@ const { config, validateConfig } = require('./config');
 const logger = require('./utils/logger');
 const { ensureDirectoryExists } = require('./utils/fileUtils');
 const { securityHeaders, requirePin } = require('./middleware/security');
+const { safeCompare } = require('./utils/security');
 const { initUploadLimiter, pinVerifyLimiter, downloadLimiter } = require('./middleware/rateLimiter');
 
 // Create Express app
@@ -40,7 +41,7 @@ app.use('/api/files', requirePin(config.pin), downloadLimiter, fileRoutes);
 
 // Root route
 app.get('/', (req, res) => {
-  if (config.pin && !req.cookies.DUMBDROP_PIN) {
+  if (config.pin && !safeCompare(req.cookies?.DUMBDROP_PIN, config.pin)) {
     return res.redirect('/login.html');
   }
   

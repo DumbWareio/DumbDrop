@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -54,6 +55,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="login-container">
         <div class="pin-header">
@@ -68,7 +70,7 @@
 
     <script>
         // Initialize theme
-        const savedTheme = localStorage.getItem('theme') || 
+        const savedTheme = localStorage.getItem('theme') ||
             (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         document.documentElement.setAttribute('data-theme', savedTheme);
 
@@ -78,7 +80,7 @@
         const createPinInputs = (length) => {
             const form = document.getElementById('pin-form');
             form.innerHTML = '';  // Clear existing inputs
-            
+
             for (let i = 0; i < length; i++) {
                 const input = document.createElement('input');
                 input.type = 'text';
@@ -130,16 +132,15 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ pin })
                 });
-
                 const data = await response.json();
-                if (data.success) {
+                if (data.success && !data.error) {
                     window.location.href = '/';
                 } else {
                     // Show error message
                     document.getElementById('pin-error').textContent = data.error;
-                    
+
                     // Only clear inputs and focus if not locked out
-                    if (!data.error.includes('try again in')) {
+                    if (!data.error.includes('Too many PIN verification attempts')) {
                         const inputs = [...document.querySelectorAll('.pin-digit')];
                         inputs.forEach(input => {
                             input.value = '';
@@ -208,21 +209,39 @@
         };
 
         // Check PIN length and initialize
-        fetch('/api/auth/pin-required')
-            .then(response => response.json())
-            .then(data => {
-                if (data.required) {
-                    pinLength = data.length;
-                    createPinInputs(pinLength);
-                    setupPinHandling();
-                } else {
-                    window.location.href = '/';
-                }
-            })
-            .catch(err => {
-                console.error('Error checking PIN requirement:', err);
-                document.getElementById('pin-error').textContent = 'Error checking PIN requirement';
-            });
+        const initialize = async () => {
+            fetch('/api/auth/pin-required')
+                .then(response => {
+                    if (!response.ok) {
+                        if (response.status === 429 && response.statusText.includes("Too Many Requests")) {
+                            // If rate limit is hit, show error instead of retrying
+                            document.getElementById('pin-error').textContent = response.error;
+                            return Promise.reject('Rate limit hit');
+                        }
+                        throw new Error(`Rate limit hit: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.required) {
+                        pinLength = data.length;
+                        createPinInputs(pinLength);
+                        setupPinHandling();
+                    } else {
+                        window.location.href = '/';
+                    }
+                })
+                .catch(err => {
+                    console.error('Error checking PIN requirement:', err);
+                    const errorMessage = err && err.includes('Rate limit hit')
+                        ? 'Too many PIN verification attempts. Account locked for 15 minutes.'
+                        : 'Error checking PIN requirement';
+                    document.getElementById('pin-error').textContent = errorMessage;
+                });
+        }
+
+        initialize();
     </script>
 </body>
-</html> 
+
+</html>

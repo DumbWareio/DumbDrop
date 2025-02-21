@@ -24,7 +24,7 @@ router.post('/verify-pin', (req, res) => {
     if (!config.pin) {
       res.cookie('DUMBDROP_PIN', '', {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: req.secure || (process.env.NODE_ENV === 'production' && config.baseUrl.startsWith('https')),
         sameSite: 'strict',
         path: '/'
       });
@@ -49,7 +49,7 @@ router.post('/verify-pin', (req, res) => {
       
       logger.warn(`Login attempt from locked out IP: ${ip}`);
       return res.status(429).json({ 
-        error: `Too many attempts. Please try again in ${timeLeft} minutes.`
+        error: `Too many PIN verification attempts. Please try again in ${timeLeft} minutes.`
       });
     }
 
@@ -61,7 +61,7 @@ router.post('/verify-pin', (req, res) => {
       // Set secure cookie with cleaned PIN
       res.cookie('DUMBDROP_PIN', cleanedPin, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: req.secure || (process.env.NODE_ENV === 'production' && config.baseUrl.startsWith('https')),
         sameSite: 'strict',
         path: '/'
       });
@@ -78,7 +78,7 @@ router.post('/verify-pin', (req, res) => {
         success: false, 
         error: attemptsLeft > 0 ? 
           `Invalid PIN. ${attemptsLeft} attempts remaining.` : 
-          'Too many attempts. Account locked for 15 minutes.'
+          'Too many PIN verification attempts. Account locked for 15 minutes.'
       });
     }
   } catch (err) {
