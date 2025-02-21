@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -55,7 +54,6 @@
         }
     </style>
 </head>
-
 <body>
     <div class="login-container">
         <div class="pin-header">
@@ -70,7 +68,7 @@
 
     <script>
         // Initialize theme
-        const savedTheme = localStorage.getItem('theme') ||
+        const savedTheme = localStorage.getItem('theme') || 
             (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         document.documentElement.setAttribute('data-theme', savedTheme);
 
@@ -80,7 +78,6 @@
         const createPinInputs = (length) => {
             const form = document.getElementById('pin-form');
             form.innerHTML = '';  // Clear existing inputs
-
             for (let i = 0; i < length; i++) {
                 const input = document.createElement('input');
                 input.type = 'text';
@@ -138,7 +135,6 @@
                 } else {
                     // Show error message
                     document.getElementById('pin-error').textContent = data.error;
-
                     // Only clear inputs and focus if not locked out
                     if (!data.error.includes('Too many PIN verification attempts')) {
                         const inputs = [...document.querySelectorAll('.pin-digit')];
@@ -240,5 +236,4 @@
             });
     </script>
 </body>
-
 </html>
