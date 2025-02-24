@@ -130,26 +130,31 @@
                     body: JSON.stringify({ pin })
                 });
                 const data = await response.json();
-                if (data.success && !data.error) {
+                
+                // Simplified success and error handling
+                if (data.success) {
                     window.location.href = '/';
                 } else {
                     // Show error message
-                    document.getElementById('pin-error').textContent = data.error;
-                    // Only clear inputs and focus if not locked out
-                    if (!data.error.includes('Too many PIN verification attempts')) {
-                        const inputs = [...document.querySelectorAll('.pin-digit')];
+                    document.getElementById('pin-error').textContent = data.error || 'Authentication failed';
+                    
+                    // Determine if it's a lockout scenario
+                    const isLockedOut = data.error.includes('Too many PIN verification attempts');
+                    
+                    const inputs = [...document.querySelectorAll('.pin-digit')];
+                    if (isLockedOut) {
+                        // Disable inputs if locked out
+                        inputs.forEach(input => {
+                            input.disabled = true;
+                            input.classList.add('locked');
+                        });
+                    } else {
+                        // Reset inputs for other error types
                         inputs.forEach(input => {
                             input.value = '';
                             input.classList.remove('filled');
                         });
                         inputs[0].focus();
-                    } else {
-                        // If locked out, disable all inputs
-                        const inputs = [...document.querySelectorAll('.pin-digit')];
-                        inputs.forEach(input => {
-                            input.disabled = true;
-                            input.classList.add('locked');
-                        });
                     }
                 }
             } catch (err) {

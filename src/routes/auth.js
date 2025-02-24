@@ -28,7 +28,7 @@ router.post('/verify-pin', (req, res) => {
         sameSite: 'strict',
         path: '/'
       });
-      return res.json({ success: true });
+      return res.json({ success: true, error: null });
     }
 
     // Validate PIN format
@@ -36,6 +36,7 @@ router.post('/verify-pin', (req, res) => {
     if (!cleanedPin) {
       logger.warn(`Invalid PIN format from IP: ${ip}`);
       return res.status(401).json({ 
+        success: false,
         error: 'Invalid PIN format. PIN must be 4-10 digits.' 
       });
     }
@@ -49,6 +50,7 @@ router.post('/verify-pin', (req, res) => {
       
       logger.warn(`Login attempt from locked out IP: ${ip}`);
       return res.status(429).json({ 
+        success: false,
         error: `Too many PIN verification attempts. Please try again in ${timeLeft} minutes.`
       });
     }
@@ -67,7 +69,7 @@ router.post('/verify-pin', (req, res) => {
       });
 
       logger.info(`Successful PIN verification from IP: ${ip}`);
-      res.json({ success: true });
+      res.json({ success: true, error: null });
     } else {
       // Record failed attempt
       const attempts = recordAttempt(ip);
@@ -83,7 +85,7 @@ router.post('/verify-pin', (req, res) => {
     }
   } catch (err) {
     logger.error(`PIN verification error: ${err.message}`);
-    res.status(500).json({ error: 'Authentication failed' });
+    res.status(500).json({ success: false, error: 'Authentication failed' });
   }
 });
 
