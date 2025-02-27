@@ -13,6 +13,7 @@ No auth (unless you want it now!), no storage, no nothing. Just a simple file up
 - [Security](#security)
 - [Development](#development)
 - [Technical Details](#technical-details)
+- [Demo Mode](#demo-mode)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -183,6 +184,34 @@ Both {size} and {storage} use the same formatting rules based on APPRISE_SIZE_UN
 - cors: Cross-origin resource sharing
 - dotenv: Environment configuration
 - express-rate-limit: Rate limiting
+
+## Demo Mode
+
+### Overview
+DumbDrop includes a demo mode that allows testing the application without actually storing files. Perfect for trying out the interface or development testing.
+
+### Enabling Demo Mode
+Set in your environment or docker-compose.yml:
+```env
+DEMO_MODE=true
+```
+
+### Demo Features
+- 🚫 No actual file storage - files are processed in memory
+- 🎯 Full UI experience with upload/download simulation
+- 🔄 Maintains all functionality including:
+  - Drag and drop
+  - Progress tracking
+  - Multiple file uploads
+  - Directory structure
+  - File listings
+- 🚨 Clear visual indicator (red banner) showing demo status
+- 🧹 Auto-cleans upload directory on startup
+- Files are processed but not written to disk
+- Upload progress is simulated
+- File metadata stored in memory
+- Maintains same API responses as production
+- Cleared on server restart
 
 ## Contributing
 
