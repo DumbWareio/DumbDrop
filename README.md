@@ -13,6 +13,7 @@ No auth (unless you want it now!), no storage, no nothing. Just a simple file up
 - [Security](#security)
 - [Development](#development)
 - [Technical Details](#technical-details)
+- [Demo Mode](demo.md)
 - [Contributing](#contributing)
 - [License](#license)
 
