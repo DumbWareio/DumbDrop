@@ -14,6 +14,7 @@ const { getUniqueFilePath, getUniqueFolderPath } = require('../utils/fileUtils')
 const { sendNotification } = require('../services/notifications');
 const fs = require('fs');
 const { cleanupIncompleteUploads } = require('../utils/cleanup');
+const { isDemoMode, createMockUploadResponse } = require('../utils/demoMode');
 
 // Store ongoing uploads
 const uploads = new Map();

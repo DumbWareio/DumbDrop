@@ -16,6 +16,7 @@ const { ensureDirectoryExists } = require('./utils/fileUtils');
 const { securityHeaders, requirePin } = require('./middleware/security');
 const { safeCompare } = require('./utils/security');
 const { initUploadLimiter, pinVerifyLimiter, downloadLimiter } = require('./middleware/rateLimiter');
+const { injectDemoBanner, demoMiddleware } = require('./utils/demoMode');
 
 // Create Express app
 const app = express();
@@ -34,6 +35,9 @@ const { router: uploadRouter } = require('./routes/upload');
 const fileRoutes = require('./routes/files');
 const authRoutes = require('./routes/auth');
 
+// Add demo middleware before your routes
+app.use(demoMiddleware);
+
 // Use routes with appropriate middleware
 app.use('/api/auth', pinVerifyLimiter, authRoutes);
 app.use('/api/upload', requirePin(config.pin), initUploadLimiter, uploadRouter);
@@ -49,6 +53,7 @@ app.get('/', (req, res) => {
   let html = fs.readFileSync(path.join(__dirname, '../public', 'index.html'), 'utf8');
   html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
   html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
+  html = injectDemoBanner(html);
   res.send(html);
 });
 
@@ -61,6 +66,7 @@ app.get('/login.html', (req, res) => {
   
   let html = fs.readFileSync(path.join(__dirname, '../public', 'login.html'), 'utf8');
   html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
+  html = injectDemoBanner(html);
   res.send(html);
 });
 
@@ -77,6 +83,7 @@ app.use((req, res, next) => {
     if (req.path === 'index.html') {
       html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
     }
+    html = injectDemoBanner(html);
     res.send(html);
   } catch (err) {
     next();
@@ -115,6 +122,21 @@ async function initialize() {
     logger.info(`Auto upload is ${config.autoUpload ? 'enabled' : 'disabled'}`);
     if (config.appriseUrl) {
       logger.info('Apprise notifications enabled');
+    }
+    
+    // After initializing demo middleware
+    if (process.env.DEMO_MODE === 'true') {
+        logger.info('[DEMO] Running in demo mode - uploads will not be saved');
+        // Clear any existing files in upload directory
+        try {
+            const files = fs.readdirSync(config.uploadDir);
+            for (const file of files) {
+                fs.unlinkSync(path.join(config.uploadDir, file));
+            }
+            logger.info('[DEMO] Cleared upload directory');
+        } catch (err) {
+            logger.error(`[DEMO] Failed to clear upload directory: ${err.message}`);
+        }
     }
     
     return app;
