@@ -8,10 +8,11 @@ No auth (unless you want it now!), no storage, no nothing. Just a simple file up
 
 ## Table of Contents
 - [Quick Start](#quick-start)
+- [Production Deployment with Docker](#production-deployment-with-docker)
+- [Local Development (Recommended Quick Start)](LOCAL_DEVELOPMENT.md)
 - [Features](#features)
 - [Configuration](#configuration)
 - [Security](#security)
-- [Development](#development)
 - [Technical Details](#technical-details)
 - [Demo Mode](demo.md)
 - [Contributing](#contributing)
@@ -19,20 +20,14 @@ No auth (unless you want it now!), no storage, no nothing. Just a simple file up
 
 ## Quick Start
 
-### Prerequisites
-- Docker (recommended)
-- Node.js >=20.0.0 (for local development)
-
 ### Option 1: Docker (For Dummies)
 ```bash
 # Pull and run with one command
-docker run -p 3000:3000 -v ./local_uploads:/app/uploads dumbwareio/dumbdrop:latest
+docker run -p 3000:3000 -v ./uploads:/app/uploads dumbwareio/dumbdrop:latest
 ```
 1. Go to http://localhost:3000
-2. Upload a File - It'll show up in ./local_uploads
+2. Upload a File - It'll show up in ./uploads
 3. Celebrate on how dumb easy this was
-
-> **Note:** The container now uses `/app/uploads` as the upload directory. The host directory `./local_uploads` is mounted to `/app/uploads` inside the container. The Docker image no longer creates a `local_uploads` directory by default—this is managed by your host and volume mount.
 
 ### Option 2: Docker Compose (For Dummies who like customizing)
 Create a `docker-compose.yml` file:
@@ -44,7 +39,7 @@ services:
             - 3000:3000
         volumes:
             # Where your uploaded files will land
-            - ./local_uploads:/app/uploads
+            - ./uploads:/app/uploads
         environment:
             # Explicitly set upload directory inside the container
             UPLOAD_DIR: /app/uploads
@@ -59,45 +54,21 @@ services:
             # The base URL for the application
             BASE_URL: http://localhost:3000
 ```
-
 Then run:
 ```bash
 docker compose up -d
 ```
-
 1. Go to http://localhost:3000
-2. Upload a File - It'll show up in ./local_uploads
+2. Upload a File - It'll show up in ./uploads
 3. Rejoice in the glory of your dumb uploads
 
-> **Note:** The `UPLOAD_DIR` environment variable is now explicitly set to `/app/uploads` in the container. The Dockerfile only creates the `uploads` directory, not `local_uploads`. The host directory `./local_uploads` is mounted to `/app/uploads` for persistent storage.
+> **Note:** The `UPLOAD_DIR` environment variable is now explicitly set to `/app/uploads` in the container. The Dockerfile only creates the `uploads` directory, not `local_uploads`. The host directory `./uploads` is mounted to `/app/uploads` for persistent storage.
 
 ### Option 3: Running Locally (For Developers)
 
-> If you're a developer, check out our [Dev Guide](#development) for the dumb setup.
+For local development setup, troubleshooting, and advanced usage, see the dedicated guide:
 
-1. Install dependencies:
-```bash
-npm install
-```
-
-2. Set environment variables in `.env`:
-```env
-PORT=3000                  # Port to run the server on
-MAX_FILE_SIZE=1024        # Maximum file size in MB
-DUMBDROP_PIN=123456       # Optional PIN protection
-LOCAL_UPLOAD_DIR=./local_uploads  # Local upload directory (default)
-```
-
-3. Start the server:
-```bash
-npm start
-```
-
-#### Windows Users
-If you're using Windows PowerShell with Docker, use this format for paths:
-```bash
-docker run -p 3000:3000 -v "${PWD}\local_uploads:/app/uploads" dumbwareio/dumbdrop:latest
-```
+👉 [Local Development Guide](LOCAL_DEVELOPMENT.md)
 
 ## Features
 
@@ -139,7 +110,8 @@ docker run -p 3000:3000 -v "${PWD}\local_uploads:/app/uploads" dumbwareio/dumbdr
 
 See `.env.example` for a template and more details.
 
-### ALLOWED_IFRAME_ORIGINS
+<details>
+<summary>ALLOWED_IFRAME_ORIGINS</summary>
 
 To allow this app to be embedded in an iframe on specific origins (such as Organizr), set the `ALLOWED_IFRAME_ORIGINS` environment variable. For example:
 
@@ -150,15 +122,20 @@ ALLOWED_IFRAME_ORIGINS=https://organizr.example.com,https://myportal.com
 - If not set, the app will only allow itself to be embedded in an iframe on the same origin (default security).
 - If set, the app will allow embedding in iframes on the specified origins and itself.
 - **Security Note:** Only add trusted origins. Allowing arbitrary origins can expose your app to clickjacking and other attacks.
+</details>
 
-### File Extension Filtering
+<details>
+<summary>File Extension Filtering</summary>
+
 To restrict which file types can be uploaded, set the `ALLOWED_EXTENSIONS` environment variable. For example:
 ```env
 ALLOWED_EXTENSIONS=.jpg,.jpeg,.png,.pdf,.doc,.docx,.txt
 ```
 If not set, all file extensions will be allowed.
+</details>
 
-### Notification Setup
+<details>
+<summary>Notification Setup</summary>
 
 #### Message Templates
 The notification message supports the following placeholders:
@@ -182,6 +159,7 @@ Both {size} and {storage} use the same formatting rules based on APPRISE_SIZE_UN
 - Support for all Apprise notification services
 - Customizable notification messages with filename templating
 - Optional - disabled if no APPRISE_URL is set
+</details>
 
 ## Security
 
@@ -221,9 +199,6 @@ Both {size} and {storage} use the same formatting rules based on APPRISE_SIZE_UN
 5. Open a Pull Request
 
 See [Development Guide](dev/README.md) for local setup and guidelines.
-
-
-
 
 ---
 Made with ❤️ by [DumbWare.io](https://dumbware.io)
