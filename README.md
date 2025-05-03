@@ -200,7 +200,7 @@ Both {size} and {storage} use the same formatting rules based on APPRISE_SIZE_UN
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-See [Development Guide](dev/README.md) for local setup and guidelines.
+See [Local Development (Recommended Quick Start)](LOCAL_DEVELOPMENT.md) for local setup and guidelines.
 
 ---
 Made with ❤️ by [DumbWare.io](https://dumbware.io)

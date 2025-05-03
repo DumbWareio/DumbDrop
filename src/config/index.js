@@ -186,13 +186,6 @@ const config = {
     process.env.ALLOWED_EXTENSIONS.split(',').map(ext => ext.trim().toLowerCase()) : 
     null,
 
-  // =====================
-  // Allowed iframe origins
-  // =====================
-  /**
-   * Allowed iframe origins (comma-separated, optional)
-   * Set via ALLOWED_IFRAME_ORIGINS in .env
-   */
   allowedIframeOrigins: process.env.ALLOWED_IFRAME_ORIGINS
     ? process.env.ALLOWED_IFRAME_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
     : null
