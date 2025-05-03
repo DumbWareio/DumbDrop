@@ -7,6 +7,8 @@ services:
             # Replace "./local_uploads" ( before the colon ) with the path where the files land
             - ./local_uploads:/app/uploads 
         environment:  # Environment variables for the DumbDrop service
+            # Explicitly set upload directory inside the container
+            UPLOAD_DIR: /app/uploads
             DUMBDROP_TITLE: DumbDrop  # The title shown in the web interface
             MAX_FILE_SIZE: 1024  # Maximum file size in MB
             DUMBDROP_PIN: 123456  # Optional PIN protection (4-10 digits, leave empty to disable)

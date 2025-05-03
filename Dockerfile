@@ -32,8 +32,8 @@ ENV NODE_ENV=development
 RUN npm install && \
     npm cache clean --force
 
-# Create upload directories
-RUN mkdir -p uploads local_uploads
+# Create upload directory
+RUN mkdir -p uploads
 
 # Copy source with specific paths to avoid unnecessary files
 COPY src/ ./src/

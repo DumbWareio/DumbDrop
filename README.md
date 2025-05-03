@@ -32,6 +32,8 @@ docker run -p 3000:3000 -v ./local_uploads:/app/uploads dumbwareio/dumbdrop:late
 2. Upload a File - It'll show up in ./local_uploads
 3. Celebrate on how dumb easy this was
 
+> **Note:** The container now uses `/app/uploads` as the upload directory. The host directory `./local_uploads` is mounted to `/app/uploads` inside the container. The Docker image no longer creates a `local_uploads` directory by default—this is managed by your host and volume mount.
+
 ### Option 2: Docker Compose (For Dummies who like customizing)
 Create a `docker-compose.yml` file:
 ```yaml
@@ -42,8 +44,10 @@ services:
             - 3000:3000
         volumes:
             # Where your uploaded files will land
-            - ./local_uploads:/app/uploads 
+            - ./local_uploads:/app/uploads
         environment:
+            # Explicitly set upload directory inside the container
+            UPLOAD_DIR: /app/uploads
             # The title shown in the web interface
             DUMBDROP_TITLE: DumbDrop
             # Maximum file size in MB
@@ -65,6 +69,8 @@ docker compose up -d
 2. Upload a File - It'll show up in ./local_uploads
 3. Rejoice in the glory of your dumb uploads
 
+> **Note:** The `UPLOAD_DIR` environment variable is now explicitly set to `/app/uploads` in the container. The Dockerfile only creates the `uploads` directory, not `local_uploads`. The host directory `./local_uploads` is mounted to `/app/uploads` for persistent storage.
+
 ### Option 3: Running Locally (For Developers)
 
 > If you're a developer, check out our [Dev Guide](#development) for the dumb setup.
@@ -79,6 +85,7 @@ npm install
 PORT=3000                  # Port to run the server on
 MAX_FILE_SIZE=1024        # Maximum file size in MB
 DUMBDROP_PIN=123456       # Optional PIN protection
+LOCAL_UPLOAD_DIR=./local_uploads  # Local upload directory (default)
 ```
 
 3. Start the server:
@@ -111,23 +118,30 @@ docker run -p 3000:3000 -v "${PWD}\local_uploads:/app/uploads" dumbwareio/dumbdr
 
 ### Environment Variables
 
-| Variable          | Description                           | Default | Required |
-|------------------|---------------------------------------|---------|----------|
-| PORT             | Server port                           | 3000    | No       |
-| BASE_URL         | Base URL for the application          | http://localhost:PORT | No |
-| MAX_FILE_SIZE    | Maximum file size in MB               | 1024    | No       |
-| DUMBDROP_PIN     | PIN protection (4-10 digits)          | None    | No       |
-| DUMBDROP_TITLE   | Site title displayed in header        | DumbDrop| No       |
-| APPRISE_URL      | Apprise URL for notifications         | None    | No       |
-| APPRISE_MESSAGE  | Notification message template         | New file uploaded {filename} ({size}), Storage used {storage} | No |
-| APPRISE_SIZE_UNIT| Size unit for notifications           | Auto    | No       |
-| AUTO_UPLOAD      | Enable automatic upload on file selection | false   | No       |
-| ALLOWED_EXTENSIONS| Comma-separated list of allowed file extensions | None    | No       |
-| ALLOWED_IFRAME_ORIGINS | Comma-separated list of origins allowed to embed the app in an iframe (e.g. https://organizr.example.com,https://myportal.com) | None | No |
+| Variable               | Description                                                      | Default                                 | Required |
+|------------------------|------------------------------------------------------------------|-----------------------------------------|----------|
+| PORT                   | Server port                                                      | 3000                                    | No       |
+| BASE_URL               | Base URL for the application                                     | http://localhost:PORT                   | No       |
+| MAX_FILE_SIZE          | Maximum file size in MB                                          | 1024                                    | No       |
+| DUMBDROP_PIN           | PIN protection (4-10 digits)                                     | None                                    | No       |
+| DUMBDROP_TITLE         | Site title displayed in header                                   | DumbDrop                                | No       |
+| APPRISE_URL            | Apprise URL for notifications                                    | None                                    | No       |
+| APPRISE_MESSAGE        | Notification message template                                    | New file uploaded {filename} ({size}), Storage used {storage} | No |
+| APPRISE_SIZE_UNIT      | Size unit for notifications (B, KB, MB, GB, TB, or Auto)         | Auto                                    | No       |
+| AUTO_UPLOAD            | Enable automatic upload on file selection                        | false                                   | No       |
+| ALLOWED_EXTENSIONS     | Comma-separated list of allowed file extensions                  | None                                    | No       |
+| ALLOWED_IFRAME_ORIGINS | Comma-separated list of origins allowed to embed the app in an iframe | None                              | No       |
+| UPLOAD_DIR             | Directory for uploads (Docker/production; should be `/app/uploads` in container) | None (see LOCAL_UPLOAD_DIR fallback)    | No       |
+| LOCAL_UPLOAD_DIR       | Directory for uploads (local dev, fallback: './local_uploads')   | ./local_uploads                         | No       |
+
+- **UPLOAD_DIR** is used in Docker/production. If not set, LOCAL_UPLOAD_DIR is used for local development. If neither is set, the default is `./local_uploads`.
+- **Docker Note:** The Dockerfile now only creates the `uploads` directory inside the container. The host's `./local_uploads` is mounted to `/app/uploads` and should be managed on the host system.
+
+See `.env.example` for a template and more details.
 
 ### ALLOWED_IFRAME_ORIGINS
 
-To allow this app to be embedded in an iframe on specific origins (such as Organizr), set the `ALLOWED_IFRAME_ORIGINS` environment variable to a comma-separated list of allowed parent origins. Example:
+To allow this app to be embedded in an iframe on specific origins (such as Organizr), set the `ALLOWED_IFRAME_ORIGINS` environment variable. For example:
 
 ```env
 ALLOWED_IFRAME_ORIGINS=https://organizr.example.com,https://myportal.com
