@@ -10,19 +10,6 @@ const logger = require('./logger');
 const { config } = require('../config');
 
 /**
- * Get display path for logs
- * @param {string} internalPath - Internal Docker path
- * @returns {string} Display path for host machine
- */
-function getDisplayPath(internalPath) {
-  if (!internalPath.startsWith(config.uploadDir)) return internalPath;
-  
-  // Replace the container path with the host path
-  const relativePath = path.relative(config.uploadDir, internalPath);
-  return path.join(config.uploadDisplayPath, relativePath);
-}
-
-/**
  * Format file size to human readable format
  * @param {number} bytes - Size in bytes
  * @param {string} [unit] - Force specific unit (B, KB, MB, GB, TB)
@@ -90,13 +77,13 @@ async function ensureDirectoryExists(directoryPath) {
   try {
     if (!fs.existsSync(directoryPath)) {
       await fs.promises.mkdir(directoryPath, { recursive: true });
-      logger.info(`Created directory: ${getDisplayPath(directoryPath)}`);
+      logger.info(`Created directory: ${directoryPath}`);
     }
     await fs.promises.access(directoryPath, fs.constants.W_OK);
-    logger.success(`Directory is writable: ${getDisplayPath(directoryPath)}`);
+    logger.success(`Directory is writable: ${directoryPath}`);
   } catch (err) {
     logger.error(`Directory error: ${err.message}`);
-    throw new Error(`Failed to access or create directory: ${getDisplayPath(directoryPath)}`);
+    throw new Error(`Failed to access or create directory: ${directoryPath}`);
   }
 }
 
@@ -129,8 +116,8 @@ async function getUniqueFilePath(filePath) {
     }
   }
   
-  // Log using display path
-  logger.info(`Using unique path: ${getDisplayPath(finalPath)}`);
+  // Log using actual path
+  logger.info(`Using unique path: ${finalPath}`);
   return { path: finalPath, handle: fileHandle };
 }
 

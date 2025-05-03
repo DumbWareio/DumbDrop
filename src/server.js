@@ -53,13 +53,16 @@ async function startServer() {
     });
 
     // Shutdown handler function
+    let isShuttingDown = false; // Prevent multiple shutdowns
     const shutdownHandler = async (signal) => {
+      if (isShuttingDown) return;
+      isShuttingDown = true;
       logger.info(`${signal} received. Shutting down gracefully...`);
       
       // Start a shorter force shutdown timer
       const forceShutdownTimer = setTimeout(() => {
         logger.error('Force shutdown initiated');
-        throw new Error('Force shutdown due to timeout');
+        process.exit(1);
       }, 3000); // 3 seconds maximum for total shutdown
       
       try {
@@ -92,9 +95,10 @@ async function startServer() {
         // Clear the force shutdown timer since we completed gracefully
         clearTimeout(forceShutdownTimer);
         process.exitCode = 0;
+        process.exit(0); // Ensure immediate exit
       } catch (error) {
         logger.error(`Error during shutdown: ${error.message}`);
-        throw error;
+        process.exit(1);
       }
     };
 

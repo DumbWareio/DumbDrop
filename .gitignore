@@ -204,3 +204,37 @@ Thumbs.db
 .env.*
 !.env.example
 !dev/.env.dev.example
+
+# Added by Claude Task Master
+dev-debug.log
+# Environment variables
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+# OS specific
+# Task files
+.windsurfrules
+README-task-master.md
+.cursor/mcp.json
+.cursor/rules/cursor_rules.mdc
+.cursor/rules/dev_workflow.mdc
+.cursor/rules/self_improve.mdc
+.cursor/rules/taskmaster.mdc
+scripts/example_prd.txt
+scripts/prd.txt
+tasks/task_001.txt
+tasks/task_002.txt
+tasks/task_003.txt
+tasks/task_004.txt
+tasks/task_005.txt
+tasks/task_006.txt
+tasks/task_007.txt
+tasks/task_008.txt
+tasks/task_009.txt
+tasks/task_010.txt
+tasks/tasks.json

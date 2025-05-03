@@ -4,10 +4,11 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon --legacy-watch src/server.js",
+    "dev": "nodemon src/server.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "predev": "node -e \"const v=process.versions.node.split('.');if(v[0]<20) {console.error('Node.js >=20.0.0 required');process.exit(1)}\""
   },
   "keywords": [],
   "author": "",
