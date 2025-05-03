@@ -53,6 +53,7 @@ app.get('/', (req, res) => {
   let html = fs.readFileSync(path.join(__dirname, '../public', 'index.html'), 'utf8');
   html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
   html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
+  html = html.replace('{{BASE_URL}}', config.baseUrl);
   html = injectDemoBanner(html);
   res.send(html);
 });
@@ -66,6 +67,7 @@ app.get('/login.html', (req, res) => {
   
   let html = fs.readFileSync(path.join(__dirname, '../public', 'login.html'), 'utf8');
   html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
+  html = html.replace('{{BASE_URL}}', config.baseUrl);
   html = injectDemoBanner(html);
   res.send(html);
 });
@@ -83,6 +85,7 @@ app.use((req, res, next) => {
     if (req.path === 'index.html') {
       html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
     }
+    html = html.replace('{{BASE_URL}}', config.baseUrl);
     html = injectDemoBanner(html);
     res.send(html);
   } catch (err) {

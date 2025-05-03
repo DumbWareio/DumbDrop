@@ -210,7 +210,12 @@ function validateConfig() {
 
   // Validate BASE_URL format
   try {
-    new URL(config.baseUrl);
+    let url = new URL(config.baseUrl);
+    // Ensure BASE_URL ends with a slash
+    if (!config.baseUrl.endsWith('/')) {
+      logger.warn('BASE_URL did not end with a trailing slash. Automatically appending "/".');
+      config.baseUrl = config.baseUrl + '/';
+    }
   } catch (err) {
     errors.push('BASE_URL must be a valid URL');
   }
