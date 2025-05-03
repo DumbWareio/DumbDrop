@@ -123,6 +123,19 @@ docker run -p 3000:3000 -v "${PWD}\local_uploads:/app/uploads" dumbwareio/dumbdr
 | APPRISE_SIZE_UNIT| Size unit for notifications           | Auto    | No       |
 | AUTO_UPLOAD      | Enable automatic upload on file selection | false   | No       |
 | ALLOWED_EXTENSIONS| Comma-separated list of allowed file extensions | None    | No       |
+| ALLOWED_IFRAME_ORIGINS | Comma-separated list of origins allowed to embed the app in an iframe (e.g. https://organizr.example.com,https://myportal.com) | None | No |
+
+### ALLOWED_IFRAME_ORIGINS
+
+To allow this app to be embedded in an iframe on specific origins (such as Organizr), set the `ALLOWED_IFRAME_ORIGINS` environment variable to a comma-separated list of allowed parent origins. Example:
+
+```env
+ALLOWED_IFRAME_ORIGINS=https://organizr.example.com,https://myportal.com
+```
+
+- If not set, the app will only allow itself to be embedded in an iframe on the same origin (default security).
+- If set, the app will allow embedding in iframes on the specified origins and itself.
+- **Security Note:** Only add trusted origins. Allowing arbitrary origins can expose your app to clickjacking and other attacks.
 
 ### File Extension Filtering
 To restrict which file types can be uploaded, set the `ALLOWED_EXTENSIONS` environment variable. For example:

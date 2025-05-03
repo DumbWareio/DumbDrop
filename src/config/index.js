@@ -66,7 +66,13 @@ const config = {
   // File extensions
   allowedExtensions: process.env.ALLOWED_EXTENSIONS ? 
     process.env.ALLOWED_EXTENSIONS.split(',').map(ext => ext.trim().toLowerCase()) : 
-    null
+    null,
+
+  // Allowed iframe origins (for embedding in iframes)
+  // Comma-separated list of origins, e.g. "https://organizr.example.com,https://dumb.myportal.com"
+  allowedIframeOrigins: process.env.ALLOWED_IFRAME_ORIGINS
+    ? process.env.ALLOWED_IFRAME_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
+    : null
 };
 
 // Validate required settings
