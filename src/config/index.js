@@ -5,6 +5,12 @@ console.log('Loaded ENV:', {
   LOCAL_UPLOAD_DIR: process.env.LOCAL_UPLOAD_DIR,
   NODE_ENV: process.env.NODE_ENV
 });
+console.log('Loaded ENV:', {
+  PORT: process.env.PORT,
+  UPLOAD_DIR: process.env.UPLOAD_DIR,
+  LOCAL_UPLOAD_DIR: process.env.LOCAL_UPLOAD_DIR,
+  NODE_ENV: process.env.NODE_ENV
+});
 const { validatePin } = require('../utils/security');
 const logger = require('../utils/logger');
 const fs = require('fs');
@@ -108,6 +114,7 @@ ensureLocalUploadDirExists(resolvedUploadDir);
  */
 const config = {
   // =====================
+  // =====================
   // Server settings
   // =====================
   /**
@@ -126,6 +133,7 @@ const config = {
    */
   baseUrl: process.env.BASE_URL || DEFAULT_BASE_URL,
   
+  // =====================
   // =====================
   // Upload settings
   // =====================
@@ -152,6 +160,7 @@ const config = {
   autoUpload: process.env.AUTO_UPLOAD === 'true',
   
   // =====================
+  // =====================
   // Security
   // =====================
   /**
@@ -161,6 +170,7 @@ const config = {
   pin: validatePin(process.env.DUMBDROP_PIN),
   
   // =====================
+  // =====================
   // UI settings
   // =====================
   /**
@@ -169,6 +179,7 @@ const config = {
    */
   siteTitle: process.env.DUMBDROP_TITLE || DEFAULT_SITE_TITLE,
   
+  // =====================
   // =====================
   // Notification settings
   // =====================
@@ -188,6 +199,7 @@ const config = {
    */
   appriseSizeUnit: process.env.APPRISE_SIZE_UNIT,
   
+  // =====================
   // =====================
   // File extensions
   // =====================

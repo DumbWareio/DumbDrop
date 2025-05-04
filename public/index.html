@@ -966,17 +966,6 @@
         const savedTheme = localStorage.getItem('theme') || 
             (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         setTheme(savedTheme);
-
-        document.addEventListener('DOMContentLoaded', function() {
-            // Rewrite asset URLs to use BASE_URL as prefix if not absolute
-            const baseUrl = window.BASE_URL;
-            document.querySelectorAll('link[rel="stylesheet"], link[rel="manifest"], link[rel="icon"]').forEach(link => {
-                const href = link.getAttribute('href');
-                if (href && !href.startsWith('http') && !href.startsWith('data:') && !href.startsWith(baseUrl)) {
-                    link.setAttribute('href', baseUrl + href.replace(/^\//, ''));
-                }
-            });
-        });
     </script>
 </body>
 </html>
