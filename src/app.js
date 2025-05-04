@@ -53,6 +53,7 @@ app.get('/', (req, res) => {
   let html = fs.readFileSync(path.join(__dirname, '../public', 'index.html'), 'utf8');
   html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
   html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
+  html = html.replace('{{MAX_RETRIES}}', config.clientMaxRetries.toString());
   // Ensure baseUrl has a trailing slash for correct asset linking
   const baseUrlWithSlash = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
   html = html.replace(/{{BASE_URL}}/g, baseUrlWithSlash);
@@ -88,6 +89,7 @@ app.use((req, res, next) => {
     html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
     if (req.path === '/index.html' || req.path === 'index.html') {
       html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
+      html = html.replace('{{MAX_RETRIES}}', config.clientMaxRetries.toString());
     }
     // Ensure baseUrl has a trailing slash
     const baseUrlWithSlash = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
