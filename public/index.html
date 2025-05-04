@@ -224,6 +224,9 @@
 
                         if (response.ok) {
                             const data = await response.json();
+                            if (attempt > 0) {
+                                console.log(`Chunk upload successful on retry attempt ${attempt} for ${this.file.webkitRelativePath || this.file.name}`);
+                            }
                             // Update progress based on server response
                             // this.position is updated by readChunk(), so progress reflects total uploaded
                             this.updateProgress(data.progress);
@@ -236,6 +239,15 @@
                             try {
                                 errorText = await response.text();
                             } catch (textError) { /* ignore if reading text fails */ }
+
+                            // --- Add Special 404 Handling ---
+                            if (response.status === 404 && attempt > 0) {
+                                console.warn(`Received 404 Not Found on retry attempt ${attempt} for ${this.file.webkitRelativePath || this.file.name}. Assuming upload completed previously.`);
+                                this.updateProgress(100); // Mark as complete
+                                return; // Exit retry loop successfully
+                            }
+                            // --- End Special 404 Handling ---
+
                             lastError = new Error(`Failed to upload chunk: ${response.status} ${response.statusText}. Server response: ${errorText}`);
                             console.error(`Chunk upload attempt ${attempt} failed: ${lastError.message}`);
                             this.updateProgressElementInfo(`Attempt ${attempt} failed: ${response.statusText}`, 'var(--danger-color)');

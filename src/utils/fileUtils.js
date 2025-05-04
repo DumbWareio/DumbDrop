@@ -160,6 +160,16 @@ function sanitizePathPreserveDirs(filePath) {
     .join('/');
 }
 
+/**
+ * Validate batch ID format
+ * @param {string} batchId - Batch ID to validate
+ * @returns {boolean} True if valid (matches timestamp-9_alphanumeric format)
+ */
+function isValidBatchId(batchId) {
+  if (!batchId) return false;
+  return /^\d+-[a-z0-9]{9}$/.test(batchId);
+}
+
 module.exports = {
   formatFileSize,
   calculateDirectorySize,
@@ -167,5 +177,6 @@ module.exports = {
   getUniqueFilePath,
   getUniqueFolderPath,
   sanitizeFilename,
-  sanitizePathPreserveDirs
+  sanitizePathPreserveDirs,
+  isValidBatchId
 }; 

@@ -9,6 +9,7 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 
 const { config, validateConfig } = require('./config');
 const logger = require('./utils/logger');
@@ -113,6 +114,10 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   });
 });
 
+// --- Add this after config is loaded ---
+const METADATA_DIR = path.join(config.uploadDir, '.metadata');
+// --- End addition ---
+
 /**
  * Initialize the application
  * Sets up required directories and validates configuration
@@ -124,6 +129,25 @@ async function initialize() {
     
     // Ensure upload directory exists and is writable
     await ensureDirectoryExists(config.uploadDir);
+
+    // --- Add this section ---
+    // Ensure metadata directory exists
+    try {
+        if (!fs.existsSync(METADATA_DIR)) {
+            await fsPromises.mkdir(METADATA_DIR, { recursive: true });
+            logger.info(`Created metadata directory: ${METADATA_DIR}`);
+        } else {
+            logger.info(`Metadata directory exists: ${METADATA_DIR}`);
+        }
+         // Check writability (optional but good practice)
+        await fsPromises.access(METADATA_DIR, fs.constants.W_OK);
+         logger.success(`Metadata directory is writable: ${METADATA_DIR}`);
+    } catch (err) {
+        logger.error(`Metadata directory error (${METADATA_DIR}): ${err.message}`);
+        // Decide if this is fatal. If resumability is critical, maybe throw.
+        throw new Error(`Failed to access or create metadata directory: ${METADATA_DIR}`);
+    }
+    // --- End added section ---
     
     // Log configuration
     logger.info(`Maximum file size set to: ${config.maxFileSize / (1024 * 1024)}MB`);
