@@ -15,6 +15,7 @@ function securityHeaders(req, res, next) {
   // Content Security Policy
   let csp =
     "default-src 'self'; " +
+    "connect-src 'self'; " +
     "style-src 'self' 'unsafe-inline' cdn.jsdelivr.net; " +
     "script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; " +
     "img-src 'self' data: blob:;";

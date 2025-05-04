@@ -53,7 +53,9 @@ app.get('/', (req, res) => {
   let html = fs.readFileSync(path.join(__dirname, '../public', 'index.html'), 'utf8');
   html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
   html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
-  html = html.replace(/{{BASE_URL}}/g, '/');
+  // Ensure baseUrl has a trailing slash for correct asset linking
+  const baseUrlWithSlash = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
+  html = html.replace(/{{BASE_URL}}/g, baseUrlWithSlash);
   html = injectDemoBanner(html);
   res.send(html);
 });
@@ -67,7 +69,9 @@ app.get('/login.html', (req, res) => {
   
   let html = fs.readFileSync(path.join(__dirname, '../public', 'login.html'), 'utf8');
   html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
-  html = html.replace(/{{BASE_URL}}/g, '/');
+  // Ensure baseUrl has a trailing slash
+  const baseUrlWithSlash = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
+  html = html.replace(/{{BASE_URL}}/g, baseUrlWithSlash);
   html = injectDemoBanner(html);
   res.send(html);
 });
@@ -85,7 +89,9 @@ app.use((req, res, next) => {
     if (req.path === '/index.html' || req.path === 'index.html') {
       html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
     }
-    html = html.replace(/{{BASE_URL}}/g, '/');
+    // Ensure baseUrl has a trailing slash
+    const baseUrlWithSlash = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
+    html = html.replace(/{{BASE_URL}}/g, baseUrlWithSlash);
     html = injectDemoBanner(html);
     res.send(html);
   } catch (err) {

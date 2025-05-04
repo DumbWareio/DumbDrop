@@ -117,7 +117,9 @@
                     headers['X-Batch-ID'] = this.batchId;
                 }
 
-                const response = await fetch(window.BASE_URL + '/api/upload/init', {
+                // Remove leading slash from API path before concatenating
+                const apiUrl = '/api/upload/init'.startsWith('/') ? '/api/upload/init'.substring(1) : '/api/upload/init';
+                const response = await fetch(window.BASE_URL + apiUrl, {
                     method: 'POST',
                     headers,
                     body: JSON.stringify({
@@ -153,7 +155,10 @@
             }
 
             async uploadChunk(chunk) {
-                const response = await fetch(window.BASE_URL + `/api/upload/chunk/${this.uploadId}`, {
+                // Remove leading slash from API path before concatenating
+                const chunkApiUrlPath = `/api/upload/chunk/${this.uploadId}`;
+                const chunkApiUrl = chunkApiUrlPath.startsWith('/') ? chunkApiUrlPath.substring(1) : chunkApiUrlPath;
+                const response = await fetch(window.BASE_URL + chunkApiUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/octet-stream',
