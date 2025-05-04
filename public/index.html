@@ -53,9 +53,26 @@
 
     <script defer>
         const CHUNK_SIZE = 1024 * 1024; // 1MB chunks
-        const MAX_RETRIES = 3;
-        const RETRY_DELAY = 1000;
-        const AUTO_UPLOAD = ['true', '1', 'yes'].includes('{{AUTO_UPLOAD}}'.toLowerCase());
+        const RETRY_DELAY = 1000; // 1 second delay between retries
+
+        // Read MAX_RETRIES from the injected server value, with a fallback
+        const MAX_RETRIES_STR = '{{MAX_RETRIES}}';
+        let maxRetries = 5; // Default value
+        if (MAX_RETRIES_STR && MAX_RETRIES_STR !== '{{MAX_RETRIES}}') {
+            const parsedRetries = parseInt(MAX_RETRIES_STR, 10);
+            if (!isNaN(parsedRetries) && parsedRetries >= 0) {
+                maxRetries = parsedRetries;
+            } else {
+                console.warn(`Invalid MAX_RETRIES value "${MAX_RETRIES_STR}" received from server, defaulting to ${maxRetries}.`);
+            }
+        } else {
+             console.warn('MAX_RETRIES not injected by server, defaulting to 5.');
+        }
+        window.MAX_RETRIES = maxRetries; // Assign to window for potential global use/debugging
+        console.log(`Max retries for chunk uploads: ${window.MAX_RETRIES}`);
+
+        const AUTO_UPLOAD_STR = '{{AUTO_UPLOAD}}';
+        const AUTO_UPLOAD = ['true', '1', 'yes'].includes(AUTO_UPLOAD_STR.toLowerCase());
 
         // Utility function to generate a unique batch ID
         function generateBatchId() {
@@ -82,12 +99,21 @@
                 this.lastUploadedBytes = 0;
                 this.lastUploadTime = null;
                 this.uploadRate = 0;
+                this.maxRetries = window.MAX_RETRIES; // Use configured retries
+                this.retryDelay = RETRY_DELAY; // Use constant
             }
 
             async start() {
                 try {
+                    this.updateProgress(0); // Initial progress update
                     await this.initUpload();
-                    await this.uploadChunks();
+                    if (this.file.size > 0) { // Only upload chunks if file is not empty
+                        await this.uploadChunks();
+                    } else {
+                        console.log(`Skipping chunk upload for zero-byte file: ${this.file.name}`);
+                        // Server handles zero-byte completion in /init
+                        this.updateProgress(100); // Mark as complete on client too
+                    }
                     return true;
                 } catch (error) {
                     console.error('Upload failed:', error);
@@ -139,10 +165,22 @@
 
             async uploadChunks() {
                 this.createProgressElement();
+                let currentChunkStartPosition = this.position; // Track start position for retries
 
                 while (this.position < this.file.size) {
-                    const chunk = await this.readChunk();
-                    await this.uploadChunk(chunk);
+                    const chunk = await this.readChunk(); // Reads based on current this.position
+                    try {
+                        // Attempt to upload the chunk with retry logic
+                        // Pass the position *before* reading the chunk, as that's the start of the data being sent
+                        await this.uploadChunkWithRetry(chunk, currentChunkStartPosition);
+                        // If successful, update the start position for the *next* chunk read
+                        // this.position is updated internally by readChunk, so currentChunkStartPosition reflects the next read point
+                        currentChunkStartPosition = this.position;
+                    } catch (error) {
+                        // If uploadChunkWithRetry fails after all retries, propagate the error
+                        console.error(`UploadChunks failed after retries for chunk starting at ${currentChunkStartPosition}. File: ${this.file.webkitRelativePath || this.file.name}`);
+                        throw error; // Propagate up to the start() method's catch block
+                    }
                 }
             }
 
@@ -154,25 +192,94 @@
                 return await blob.arrayBuffer();
             }
 
-            async uploadChunk(chunk) {
-                // Remove leading slash from API path before concatenating
+            async uploadChunkWithRetry(chunk, chunkStartPosition) {
                 const chunkApiUrlPath = `/api/upload/chunk/${this.uploadId}`;
                 const chunkApiUrl = chunkApiUrlPath.startsWith('/') ? chunkApiUrlPath.substring(1) : chunkApiUrlPath;
-                const response = await fetch(window.BASE_URL + chunkApiUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/octet-stream',
-                        'X-Batch-ID': this.batchId
-                    },
-                    body: chunk
-                });
+                let lastError = null;
 
-                if (!response.ok) {
-                    throw new Error(`Failed to upload chunk: ${response.statusText}`);
+                for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+                    try {
+                        if (attempt > 0) {
+                            console.warn(`Retrying chunk (start: ${chunkStartPosition}) upload for ${this.file.webkitRelativePath || this.file.name} (Attempt ${attempt}/${this.maxRetries})...`);
+                            this.updateProgressElementInfo(`Retrying attempt ${attempt}...`, 'var(--warning-color)');
+                        }
+
+                        // Use AbortController for potential timeout or cancellation during fetch
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30-second timeout per attempt
+
+                        const response = await fetch(window.BASE_URL + chunkApiUrl, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/octet-stream',
+                                'X-Batch-ID': this.batchId
+                                // Consider adding 'Content-Range': `bytes ${chunkStartPosition}-${chunkStartPosition + chunk.byteLength - 1}/${this.file.size}`
+                                // If the server supports handling potential duplicate chunks via Content-Range
+                            },
+                            body: chunk,
+                            signal: controller.signal // Add abort signal
+                        });
+
+                        clearTimeout(timeoutId); // Clear timeout if fetch completes
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (attempt > 0) {
+                                console.log(`Chunk upload successful on retry attempt ${attempt} for ${this.file.webkitRelativePath || this.file.name}`);
+                            }
+                            // Update progress based on server response
+                            // this.position is updated by readChunk(), so progress reflects total uploaded
+                            this.updateProgress(data.progress);
+                            // Success! Exit the retry loop.
+                            this.updateProgressElementInfo('uploading...'); // Reset info message
+                            return;
+                        } else {
+                            // Server responded with an error status (4xx, 5xx)
+                            let errorText = 'Unknown server error';
+                            try {
+                                errorText = await response.text();
+                            } catch (textError) { /* ignore if reading text fails */ }
+
+                            // --- Add Special 404 Handling ---
+                            if (response.status === 404 && attempt > 0) {
+                                console.warn(`Received 404 Not Found on retry attempt ${attempt} for ${this.file.webkitRelativePath || this.file.name}. Assuming upload completed previously.`);
+                                this.updateProgress(100); // Mark as complete
+                                return; // Exit retry loop successfully
+                            }
+                            // --- End Special 404 Handling ---
+
+                            lastError = new Error(`Failed to upload chunk: ${response.status} ${response.statusText}. Server response: ${errorText}`);
+                            console.error(`Chunk upload attempt ${attempt} failed: ${lastError.message}`);
+                            this.updateProgressElementInfo(`Attempt ${attempt} failed: ${response.statusText}`, 'var(--danger-color)');
+                        }
+                    } catch (error) {
+                        // Network error, fetch failed completely, or timeout
+                        lastError = error;
+                        if (error.name === 'AbortError') {
+                             console.error(`Chunk upload attempt ${attempt} timed out after 30 seconds.`);
+                             this.updateProgressElementInfo(`Attempt ${attempt} timed out`, 'var(--danger-color)');
+                        } else {
+                            console.error(`Chunk upload attempt ${attempt} failed with network error: ${error.message}`);
+                             this.updateProgressElementInfo(`Attempt ${attempt} network error`, 'var(--danger-color)');
+                        }
+                    }
+
+                    // If not the last attempt, wait before retrying
+                    if (attempt < this.maxRetries) {
+                        // Exponential backoff: 1s, 2s, 4s, ... but capped
+                        const delay = Math.min(this.retryDelay * Math.pow(2, attempt), 30000); // Max 30s delay
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
                 }
 
-                const data = await response.json();
-                this.updateProgress(data.progress);
+                // If we exit the loop, all retries have failed.
+                // Position reset is tricky. If the server *did* receive a chunk but failed to respond OK,
+                // simply resending might corrupt data unless the server handles it idempotently.
+                // Failing the whole upload is often safer.
+                // this.position = chunkStartPosition; // Re-enable if server can handle duplicate chunks safely
+                console.error(`Chunk upload failed permanently after ${this.maxRetries} retries for ${this.file.webkitRelativePath || this.file.name}, chunk starting at ${chunkStartPosition}.`);
+                this.updateProgressElementInfo(`Upload failed after ${this.maxRetries} retries`, 'var(--danger-color)');
+                throw lastError || new Error(`Chunk upload failed after ${this.maxRetries} retries.`);
             }
 
             createProgressElement() {
@@ -240,8 +347,12 @@
                     }
                     
                     // Update progress info
-                    this.progressElement.infoSpan.textContent = `${rateText} · ${percent < 100 ? 'uploading...' : 'complete'}`;
-                    this.progressElement.detailsSpan.textContent = 
+                    const statusText = percent < 100 ? 'uploading...' : 'complete';
+                    // Use the helper for info updates, only update if not showing a retry message
+                    if (!this.progressElement.infoSpan.textContent.startsWith('Retry') && !this.progressElement.infoSpan.textContent.startsWith('Attempt')) {
+                       this.updateProgressElementInfo(`${rateText} · ${statusText}`);
+                    }
+                     this.progressElement.detailsSpan.textContent = 
                         `${formatFileSize(this.position)} of ${formatFileSize(this.file.size)} (${percent.toFixed(1)}%)`;
                     
                     // Update tracking variables
@@ -254,6 +365,31 @@
                         }, 1000);
                     }
                 }
+            }
+
+            // Helper to update the info message and color in the progress element
+            updateProgressElementInfo(message, color = '') {
+                 if (this.progressElement && this.progressElement.infoSpan) {
+                    this.progressElement.infoSpan.textContent = message;
+                    this.progressElement.infoSpan.style.color = color; // Reset if color is empty string
+                }
+            }
+
+            // Helper to attempt cancellation on the server
+            async cancelUploadOnServer() {
+                if (!this.uploadId) return;
+                console.log(`Attempting to cancel upload ${this.uploadId} on server due to error.`);
+                try {
+                     const cancelApiUrlPath = `/api/upload/cancel/${this.uploadId}`;
+                     const cancelApiUrl = cancelApiUrlPath.startsWith('/') ? cancelApiUrlPath.substring(1) : cancelApiUrlPath;
+                    // No need to wait for response here, just fire and forget
+                    fetch(window.BASE_URL + cancelApiUrl, { method: 'POST' }).catch(err => {
+                         console.warn(`Sending cancel request failed for upload ${this.uploadId}:`, err);
+                    });
+                } catch (cancelError) {
+                    // Catch synchronous errors, though unlikely with fetch
+                    console.warn(`Error initiating cancel request for upload ${this.uploadId}:`, cancelError);
+                } // Add closing brace for try block
             }
         }
 
@@ -830,17 +966,6 @@
         const savedTheme = localStorage.getItem('theme') || 
             (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         setTheme(savedTheme);
-
-        document.addEventListener('DOMContentLoaded', function() {
-            // Rewrite asset URLs to use BASE_URL as prefix if not absolute
-            const baseUrl = window.BASE_URL;
-            document.querySelectorAll('link[rel="stylesheet"], link[rel="manifest"], link[rel="icon"]').forEach(link => {
-                const href = link.getAttribute('href');
-                if (href && !href.startsWith('http') && !href.startsWith('data:') && !href.startsWith(baseUrl)) {
-                    link.setAttribute('href', baseUrl + href.replace(/^\//, ''));
-                }
-            });
-        });
     </script>
 </body>
 </html>

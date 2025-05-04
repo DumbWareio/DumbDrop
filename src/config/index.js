@@ -5,10 +5,17 @@ console.log('Loaded ENV:', {
   LOCAL_UPLOAD_DIR: process.env.LOCAL_UPLOAD_DIR,
   NODE_ENV: process.env.NODE_ENV
 });
+console.log('Loaded ENV:', {
+  PORT: process.env.PORT,
+  UPLOAD_DIR: process.env.UPLOAD_DIR,
+  LOCAL_UPLOAD_DIR: process.env.LOCAL_UPLOAD_DIR,
+  NODE_ENV: process.env.NODE_ENV
+});
 const { validatePin } = require('../utils/security');
 const logger = require('../utils/logger');
 const fs = require('fs');
 const path = require('path');
+const { version } = require('../../package.json'); // Get version from package.json
 
 /**
  * Environment Variables Reference
@@ -33,6 +40,18 @@ const path = require('path');
 const logConfig = (message, level = 'info') => {
   const prefix = level === 'warning' ? '⚠️ WARNING:' : 'ℹ️ INFO:';
   console.log(`${prefix} CONFIGURATION: ${message}`);
+};
+
+// Default configurations
+const DEFAULT_PORT = 3000;
+const DEFAULT_CHUNK_SIZE = 1024 * 1024 * 100; // 100MB
+const DEFAULT_SITE_TITLE = 'DumbDrop';
+const DEFAULT_BASE_URL = 'http://localhost:3000';
+const DEFAULT_CLIENT_MAX_RETRIES = 5; // Default retry count
+
+const logAndReturn = (key, value, isDefault = false) => {
+  logConfig(`${key}: ${value}${isDefault ? ' (default)' : ''}`);
+  return value;
 };
 
 /**
@@ -95,13 +114,14 @@ ensureLocalUploadDirExists(resolvedUploadDir);
  */
 const config = {
   // =====================
+  // =====================
   // Server settings
   // =====================
   /**
    * Port for the server (default: 3000)
    * Set via PORT in .env
    */
-  port: process.env.PORT || 3000,
+  port: process.env.PORT || DEFAULT_PORT,
   /**
    * Node environment (default: 'development')
    * Set via NODE_ENV in .env
@@ -111,8 +131,9 @@ const config = {
    * Base URL for the app (default: http://localhost:${PORT})
    * Set via BASE_URL in .env
    */
-  baseUrl: process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`,
+  baseUrl: process.env.BASE_URL || DEFAULT_BASE_URL,
   
+  // =====================
   // =====================
   // Upload settings
   // =====================
@@ -139,6 +160,7 @@ const config = {
   autoUpload: process.env.AUTO_UPLOAD === 'true',
   
   // =====================
+  // =====================
   // Security
   // =====================
   /**
@@ -148,14 +170,16 @@ const config = {
   pin: validatePin(process.env.DUMBDROP_PIN),
   
   // =====================
+  // =====================
   // UI settings
   // =====================
   /**
    * Site title (default: 'DumbDrop')
    * Set via DUMBDROP_TITLE in .env
    */
-  siteTitle: process.env.DUMBDROP_TITLE || 'DumbDrop',
+  siteTitle: process.env.DUMBDROP_TITLE || DEFAULT_SITE_TITLE,
   
+  // =====================
   // =====================
   // Notification settings
   // =====================
@@ -176,6 +200,7 @@ const config = {
   appriseSizeUnit: process.env.APPRISE_SIZE_UNIT,
   
   // =====================
+  // =====================
   // File extensions
   // =====================
   /**
@@ -188,7 +213,30 @@ const config = {
 
   allowedIframeOrigins: process.env.ALLOWED_IFRAME_ORIGINS
     ? process.env.ALLOWED_IFRAME_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
-    : null
+    : null,
+
+  /**
+   * Max number of retries for client-side chunk uploads (default: 5)
+   * Set via CLIENT_MAX_RETRIES in .env
+   */
+  clientMaxRetries: (() => {
+    const envValue = process.env.CLIENT_MAX_RETRIES;
+    const defaultValue = DEFAULT_CLIENT_MAX_RETRIES;
+    if (envValue === undefined) {
+      return logAndReturn('CLIENT_MAX_RETRIES', defaultValue, true);
+    }
+    const retries = parseInt(envValue, 10);
+    if (isNaN(retries) || retries < 0) {
+      logConfig(
+        `Invalid CLIENT_MAX_RETRIES value: "${envValue}". Using default: ${defaultValue}`,
+        'warning',
+      );
+      return logAndReturn('CLIENT_MAX_RETRIES', defaultValue, true);
+    }
+    return logAndReturn('CLIENT_MAX_RETRIES', retries);
+  })(),
+
+  uploadPin: logAndReturn('UPLOAD_PIN', process.env.UPLOAD_PIN || null),
 };
 
 console.log(`Upload directory configured as: ${config.uploadDir}`);
