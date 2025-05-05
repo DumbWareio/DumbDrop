@@ -63,12 +63,15 @@ app.get('/', (req, res) => {
     html = html.replace(/{{BASE_URL}}/g, baseUrlWithSlash);
     
     // Generate Footer Content
-    let footerHtml = `<span class="footer-static">Built with ❤️ by <a href="https://www.dumbware.io/" target="_blank" rel="noopener noreferrer">Dumbware</a></span>`;
+    let footerHtml = ''; // Initialize empty
     if (config.footerLinks && config.footerLinks.length > 0) {
-        const dynamicLinksHtml = config.footerLinks.map(link => 
+        // If custom links exist, use only them
+        footerHtml = config.footerLinks.map(link => 
             `<a href="${link.url}" target="_blank" rel="noopener noreferrer">${link.text}</a>`
         ).join('<span class="footer-separator"> | </span>');
-        footerHtml += `<span class="footer-separator"> | </span>` + dynamicLinksHtml;
+    } else {
+        // Otherwise, use only the default static link
+        footerHtml = `<span class="footer-static">Built by <a href="https://www.dumbware.io/" target="_blank" rel="noopener noreferrer">Dumbwareio</a></span>`;
     }
     html = html.replace('{{FOOTER_CONTENT}}', footerHtml);
 
