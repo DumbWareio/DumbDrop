@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main # Trigger the workflow on pushes to the main branch
+      - dev  # Trigger the workflow on pushes to the dev branch
 
 jobs:
   build-and-push:
@@ -39,6 +40,8 @@ jobs:
           images: |
             name=dumbwareio/dumbdrop
           tags: |
+            # Add :dev tag for pushes to the dev branch
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
             # the semantic versioning tags add "latest" when a version tag is present
             # but since version tags aren't being used (yet?) let's add "latest" anyway
             type=raw,value=latest

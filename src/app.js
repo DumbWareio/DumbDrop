@@ -51,6 +51,15 @@ app.get('/', (req, res) => {
     return res.redirect('/login.html');
   }
   
+  let html = fs.readFileSync(path.join(__dirname, '../public', 'index.html'), 'utf8');
+  html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
+  html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
+  html = html.replace('{{MAX_RETRIES}}', config.clientMaxRetries.toString());
+  // Ensure baseUrl has a trailing slash for correct asset linking
+  const baseUrlWithSlash = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
+  html = html.replace(/{{BASE_URL}}/g, baseUrlWithSlash);
+  html = injectDemoBanner(html);
+  res.send(html);
   try {
     let html = fs.readFileSync(path.join(__dirname, '../public', 'index.html'), 'utf8');
     

@@ -11,12 +11,6 @@ console.log('Loaded ENV:', {
   LOCAL_UPLOAD_DIR: process.env.LOCAL_UPLOAD_DIR,
   NODE_ENV: process.env.NODE_ENV
 });
-console.log('Loaded ENV:', {
-  PORT: process.env.PORT,
-  UPLOAD_DIR: process.env.UPLOAD_DIR,
-  LOCAL_UPLOAD_DIR: process.env.LOCAL_UPLOAD_DIR,
-  NODE_ENV: process.env.NODE_ENV
-});
 const { validatePin } = require('../utils/security');
 const logger = require('../utils/logger'); // Use the default logger instance
 const fs = require('fs');
