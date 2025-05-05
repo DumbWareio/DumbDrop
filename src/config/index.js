@@ -11,6 +11,12 @@ console.log('Loaded ENV:', {
   LOCAL_UPLOAD_DIR: process.env.LOCAL_UPLOAD_DIR,
   NODE_ENV: process.env.NODE_ENV
 });
+console.log('Loaded ENV:', {
+  PORT: process.env.PORT,
+  UPLOAD_DIR: process.env.UPLOAD_DIR,
+  LOCAL_UPLOAD_DIR: process.env.LOCAL_UPLOAD_DIR,
+  NODE_ENV: process.env.NODE_ENV
+});
 const { validatePin } = require('../utils/security');
 const logger = require('../utils/logger'); // Use the default logger instance
 const fs = require('fs');
@@ -36,15 +42,21 @@ const { version } = require('../../package.json'); // Get version from package.j
  * ALLOWED_IFRAME_ORIGINS - Comma-separated list of allowed iframe origins (optional)
  */
 
+// Helper for clear configuration logging
+const logConfig = (message, level = 'info') => {
+  const prefix = level === 'warning' ? '⚠️ WARNING:' : 'ℹ️ INFO:';
+  console.log(`${prefix} CONFIGURATION: ${message}`);
+};
+
 // Default configurations
 const DEFAULT_PORT = 3000;
 const DEFAULT_CHUNK_SIZE = 1024 * 1024 * 100; // 100MB
 const DEFAULT_SITE_TITLE = 'DumbDrop';
-const DEFAULT_BASE_URL = `http://localhost:${DEFAULT_PORT}`;
-const DEFAULT_CLIENT_MAX_RETRIES = 3; // Default retry count
+const DEFAULT_BASE_URL = 'http://localhost:3000';
+const DEFAULT_CLIENT_MAX_RETRIES = 5; // Default retry count
 
 const logAndReturn = (key, value, isDefault = false) => {
-  logger.info(`${key}: ${value}${isDefault ? ' (default)' : ''}`);
+  logConfig(`${key}: ${value}${isDefault ? ' (default)' : ''}`);
   return value;
 };
 
@@ -206,6 +218,7 @@ const config = {
    */
   footerLinks: parseFooterLinks(process.env.FOOTER_LINKS),
   
+  // =====================
   // =====================
   // =====================
   // Notification settings
