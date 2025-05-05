@@ -23,10 +23,12 @@ RUN . /opt/venv/bin/activate && \
 # Add virtual environment to PATH
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Create group and user
-# We use the ARG values here. The entrypoint script will handle runtime adjustments if ENV vars are set.
-RUN addgroup -g ${PGID} nodeuser && \
-    adduser -u ${PUID} -G nodeuser -s /bin/sh -D nodeuser
+# Create group and user with fallback to prevent build failures
+# We use the ARG values here, but with a fallback mechanism to avoid build failures
+RUN addgroup -g ${PGID} nodeuser 2>/dev/null || \
+    (echo "Group with GID ${PGID} already exists, creating with alternate GID" && addgroup nodeuser) && \
+    adduser -u ${PUID} -G nodeuser -s /bin/sh -D nodeuser 2>/dev/null || \
+    (echo "User with UID ${PUID} already exists, creating with alternate UID" && adduser -G nodeuser -s /bin/sh -D nodeuser)
 
 WORKDIR /usr/src/app
 

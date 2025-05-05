@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
     dumbdrop:
         image: dumbwareio/dumbdrop:latest
@@ -25,6 +23,9 @@ services:
             # APPRISE_MESSAGE: "New file uploaded - {filename} ({size}), Storage used {storage}"  # Notification message template with placeholders: {filename}, {size}, {storage}
             # APPRISE_SIZE_UNIT: "Auto"  # Size unit for notifications (B, KB, MB, GB, TB, or Auto)
             # ALLOWED_EXTENSIONS: ".jpg,.jpeg,.png,.pdf,.doc,.docx,.txt"  # Comma-separated list of allowed file extensions (default: all allowed)
+            # PUID: 1000  # User ID for file ownership (default: 1000)
+            # PGID: 1000  # Group ID for file ownership (default: 1000)
+            # UMASK: "000"  # File permissions mask (default: 000)
         restart: unless-stopped
         # user: "${PUID}:${PGID}" # Don't set user here, entrypoint handles it
         # Consider adding healthcheck
