@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
     dumbdrop:
         image: dumbwareio/dumbdrop:latest
@@ -23,3 +25,11 @@ services:
             # APPRISE_MESSAGE: "New file uploaded - {filename} ({size}), Storage used {storage}"  # Notification message template with placeholders: {filename}, {size}, {storage}
             # APPRISE_SIZE_UNIT: "Auto"  # Size unit for notifications (B, KB, MB, GB, TB, or Auto)
             # ALLOWED_EXTENSIONS: ".jpg,.jpeg,.png,.pdf,.doc,.docx,.txt"  # Comma-separated list of allowed file extensions (default: all allowed)
+        restart: unless-stopped
+        # user: "${PUID}:${PGID}" # Don't set user here, entrypoint handles it
+        # Consider adding healthcheck
+        # healthcheck:
+        #   test: ["CMD", "curl", "--fail", "http://localhost:3000/health"] # Assuming a /health endpoint exists
+        #   interval: 30s
+        #   timeout: 10s
+        #   retries: 3
