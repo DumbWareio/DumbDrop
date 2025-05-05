@@ -49,6 +49,9 @@
         <div id="uploadProgress"></div>
         <div id="fileList" class="file-list"></div>
         <button id="uploadButton" class="upload-button" style="display: none;">Upload Files</button>
+        <footer>
+            {{FOOTER_CONTENT}}
+        </footer>
     </div>
 
     <script defer>
@@ -962,9 +965,8 @@
             setTheme(next);
         }
 
-        // Initialize theme
-        const savedTheme = localStorage.getItem('theme') || 
-            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        // Apply theme on initial load
+        const savedTheme = localStorage.getItem('theme') || 'system';
         setTheme(savedTheme);
     </script>
 </body>

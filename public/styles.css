@@ -359,3 +359,41 @@ button:disabled {
         font-size: 1.125rem;
     }
 }
+
+/* Footer Styles */
+footer {
+    width: 100%;
+    max-width: 600px; /* Match container width */
+    margin: 40px auto 20px auto; /* Add top margin */
+    padding: 15px;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--text-color);
+    opacity: 0.7;
+    border-top: 1px solid var(--border-color);
+}
+
+footer a {
+    color: var(--text-color);
+    text-decoration: none;
+    transition: opacity 0.2s ease;
+}
+
+footer a:hover {
+    opacity: 1;
+    text-decoration: underline;
+}
+
+.footer-separator {
+    margin: 0 0.5em;
+}
+
+@media (max-width: 480px) {
+    footer {
+        font-size: 0.75rem;
+    }
+
+    .footer-separator {
+        margin: 0 0.3em;
+    }
+}

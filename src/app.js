@@ -51,15 +51,33 @@ app.get('/', (req, res) => {
     return res.redirect('/login.html');
   }
   
-  let html = fs.readFileSync(path.join(__dirname, '../public', 'index.html'), 'utf8');
-  html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
-  html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
-  html = html.replace('{{MAX_RETRIES}}', config.clientMaxRetries.toString());
-  // Ensure baseUrl has a trailing slash for correct asset linking
-  const baseUrlWithSlash = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
-  html = html.replace(/{{BASE_URL}}/g, baseUrlWithSlash);
-  html = injectDemoBanner(html);
-  res.send(html);
+  try {
+    let html = fs.readFileSync(path.join(__dirname, '../public', 'index.html'), 'utf8');
+    
+    // Standard replacements
+    html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
+    html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
+    html = html.replace('{{MAX_RETRIES}}', config.clientMaxRetries.toString());
+    // Ensure baseUrl has a trailing slash
+    const baseUrlWithSlash = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
+    html = html.replace(/{{BASE_URL}}/g, baseUrlWithSlash);
+    
+    // Generate Footer Content
+    let footerHtml = `<span class="footer-static">Built with ❤️ by <a href="https://www.dumbware.io/" target="_blank" rel="noopener noreferrer">Dumbware</a></span>`;
+    if (config.footerLinks && config.footerLinks.length > 0) {
+        const dynamicLinksHtml = config.footerLinks.map(link => 
+            `<a href="${link.url}" target="_blank" rel="noopener noreferrer">${link.text}</a>`
+        ).join('<span class="footer-separator"> | </span>');
+        footerHtml += `<span class="footer-separator"> | </span>` + dynamicLinksHtml;
+    }
+    html = html.replace('{{FOOTER_CONTENT}}', footerHtml);
+
+    html = injectDemoBanner(html);
+    res.send(html);
+  } catch (err) {
+    logger.error(`Error processing index.html: ${err.message}`);
+    res.status(500).send('Error loading page');
+  }
 });
 
 // Login route
