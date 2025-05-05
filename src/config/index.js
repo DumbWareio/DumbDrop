@@ -11,8 +11,14 @@ console.log('Loaded ENV:', {
   LOCAL_UPLOAD_DIR: process.env.LOCAL_UPLOAD_DIR,
   NODE_ENV: process.env.NODE_ENV
 });
+console.log('Loaded ENV:', {
+  PORT: process.env.PORT,
+  UPLOAD_DIR: process.env.UPLOAD_DIR,
+  LOCAL_UPLOAD_DIR: process.env.LOCAL_UPLOAD_DIR,
+  NODE_ENV: process.env.NODE_ENV
+});
 const { validatePin } = require('../utils/security');
-const logger = require('../utils/logger');
+const logger = require('../utils/logger'); // Use the default logger instance
 const fs = require('fs');
 const path = require('path');
 const { version } = require('../../package.json'); // Get version from package.json
@@ -66,15 +72,15 @@ function determineUploadDirectory() {
   let uploadDir;
   if (process.env.UPLOAD_DIR) {
     uploadDir = process.env.UPLOAD_DIR;
-    logConfig(`Upload directory set from UPLOAD_DIR: ${uploadDir}`);
+    logger.info(`Upload directory set from UPLOAD_DIR: ${uploadDir}`);
   } else if (process.env.LOCAL_UPLOAD_DIR) {
     uploadDir = process.env.LOCAL_UPLOAD_DIR;
-    logConfig(`Upload directory using LOCAL_UPLOAD_DIR fallback: ${uploadDir}`, 'warning');
+    logger.warn(`Upload directory using LOCAL_UPLOAD_DIR fallback: ${uploadDir}`);
   } else {
     uploadDir = './local_uploads';
-    logConfig(`Upload directory using default fallback: ${uploadDir}`, 'warning');
+    logger.warn(`Upload directory using default fallback: ${uploadDir}`);
   }
-  logConfig(`Final upload directory path: ${require('path').resolve(uploadDir)}`);
+  logger.info(`Final upload directory path: ${require('path').resolve(uploadDir)}`);
   return uploadDir;
 }
 
@@ -95,18 +101,46 @@ function ensureLocalUploadDirExists(uploadDir) {
   try {
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
-      logConfig(`Created local upload directory: ${uploadDir}`);
+      logger.info(`Created local upload directory: ${uploadDir}`);
     } else {
-      logConfig(`Local upload directory exists: ${uploadDir}`);
+      logger.info(`Local upload directory exists: ${uploadDir}`);
     }
   } catch (err) {
-    logConfig(`Failed to create local upload directory: ${uploadDir}. Error: ${err.message}`, 'warning');
+    logger.warn(`Failed to create local upload directory: ${uploadDir}. Error: ${err.message}`);
   }
 }
 
 // Determine and ensure upload directory (for local dev)
 const resolvedUploadDir = determineUploadDirectory();
 ensureLocalUploadDirExists(resolvedUploadDir);
+
+/**
+ * Function to parse the FOOTER_LINKS environment variable
+ * @param {string} linksString - The input string containing links
+ * @returns {Array} - An array of objects containing text and URL
+ */
+const parseFooterLinks = (linksString) => {
+  if (!linksString) {
+    return [];
+  }
+  return linksString.split(',')
+    .map(linkPair => {
+      const parts = linkPair.split('@').map(part => part.trim());
+      if (parts.length === 2 && parts[0] && parts[1]) {
+        // Basic URL validation (starts with http/https)
+        if (parts[1].startsWith('http://') || parts[1].startsWith('https://')) {
+           return { text: parts[0], url: parts[1] };
+        } else {
+           logger.warn(`Invalid URL format in FOOTER_LINKS for "${parts[0]}": ${parts[1]}. Skipping.`);
+           return null;
+        }
+      } else {
+        logger.warn(`Invalid format in FOOTER_LINKS: "${linkPair}". Expected "Text @ URL". Skipping.`);
+        return null;
+      }
+    })
+    .filter(link => link !== null); // Remove null entries from invalid formats
+};
 
 /**
  * Application configuration
@@ -178,7 +212,13 @@ const config = {
    * Set via DUMBDROP_TITLE in .env
    */
   siteTitle: process.env.DUMBDROP_TITLE || DEFAULT_SITE_TITLE,
+  /**
+   * Parsed custom footer links
+   * Set via FOOTER_LINKS in .env (e.g., "Link 1 @ URL1, Link 2 @ URL2")
+   */
+  footerLinks: parseFooterLinks(process.env.FOOTER_LINKS),
   
+  // =====================
   // =====================
   // =====================
   // Notification settings
@@ -227,9 +267,8 @@ const config = {
     }
     const retries = parseInt(envValue, 10);
     if (isNaN(retries) || retries < 0) {
-      logConfig(
+      logger.warn(
         `Invalid CLIENT_MAX_RETRIES value: "${envValue}". Using default: ${defaultValue}`,
-        'warning',
       );
       return logAndReturn('CLIENT_MAX_RETRIES', defaultValue, true);
     }
