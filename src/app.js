@@ -46,20 +46,48 @@ app.use('/api/files', requirePin(config.pin), downloadLimiter, fileRoutes);
 
 // Root route
 app.get('/', (req, res) => {
-  // Check if the PIN is configured and the cookie exists
-  if (config.pin && (!req.cookies?.DUMBDROP_PIN || !safeCompare(req.cookies.DUMBDROP_PIN, config.pin))) {
-    return res.redirect('/login.html');
+  try {
+    // Check if the PIN is configured and the cookie exists
+    if (config.pin && (!req.cookies?.DUMBDROP_PIN || !safeCompare(req.cookies.DUMBDROP_PIN, config.pin))) {
+      return res.redirect('/login.html');
+    }
+    
+    let html = fs.readFileSync(path.join(__dirname, '../public', 'index.html'), 'utf8');
+    
+    // Standard replacements
+    html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
+    html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
+    html = html.replace('{{MAX_RETRIES}}', config.clientMaxRetries.toString());
+    // Ensure baseUrl has a trailing slash for correct asset linking
+    const baseUrlWithSlash = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
+    html = html.replace(/{{BASE_URL}}/g, baseUrlWithSlash);
+    
+    // Generate Footer Content
+    let footerHtml = ''; // Initialize empty
+    if (config.footerLinks && config.footerLinks.length > 0) {
+        // If custom links exist, use only them
+        footerHtml = config.footerLinks.map(link => 
+            `<a href="${link.url}" target="_blank" rel="noopener noreferrer">${link.text}</a>`
+        ).join('<span class="footer-separator"> | </span>');
+    } else {
+        // Otherwise, use only the default static link
+        footerHtml = `<span class="footer-static">Built by <a href="https://www.dumbware.io/" target="_blank" rel="noopener noreferrer">Dumbwareio</a></span>`;
+    }
+    html = html.replace('{{FOOTER_CONTENT}}', footerHtml);
+
+    // Inject demo banner if applicable
+    html = injectDemoBanner(html);
+
+    // Send the final processed HTML
+    res.send(html);
+
+  } catch (err) {
+    logger.error(`Error processing index.html for / route: ${err.message}`);
+    // Check if headers have already been sent before trying to send an error response
+    if (!res.headersSent) {
+      res.status(500).send('Error loading page');
+    }
   }
-  
-  let html = fs.readFileSync(path.join(__dirname, '../public', 'index.html'), 'utf8');
-  html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
-  html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
-  html = html.replace('{{MAX_RETRIES}}', config.clientMaxRetries.toString());
-  // Ensure baseUrl has a trailing slash for correct asset linking
-  const baseUrlWithSlash = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
-  html = html.replace(/{{BASE_URL}}/g, baseUrlWithSlash);
-  html = injectDemoBanner(html);
-  res.send(html);
 });
 
 // Login route
@@ -108,6 +136,10 @@ app.use(express.static('public'));
 // Error handling middleware
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   logger.error(`Unhandled error: ${err.message}`);
+  // Check if headers have already been sent before trying to send an error response
+  if (res.headersSent) {
+    return next(err); // Pass error to default handler if headers sent
+  }
   res.status(500).json({ 
     message: 'Internal server error', 
     error: process.env.NODE_ENV === 'development' ? err.message : undefined 

@@ -95,7 +95,7 @@ For local development setup, troubleshooting, and advanced usage, see the dedica
 | BASE_URL               | Base URL for the application                                     | http://localhost:PORT                   | No       |
 | MAX_FILE_SIZE          | Maximum file size in MB                                          | 1024                                    | No       |
 | DUMBDROP_PIN           | PIN protection (4-10 digits)                                     | None                                    | No       |
-| DUMBDROP_TITLE         | Site title displayed in header                                   | DumbDrop                                | No       |
+| DUMBDROP_TITLE         | Title displayed in the browser tab                       | DumbDrop                                | No       |
 | APPRISE_URL            | Apprise URL for notifications                                    | None                                    | No       |
 | APPRISE_MESSAGE        | Notification message template                                    | New file uploaded {filename} ({size}), Storage used {storage} | No |
 | APPRISE_SIZE_UNIT      | Size unit for notifications (B, KB, MB, GB, TB, or Auto)         | Auto                                    | No       |
@@ -104,6 +104,7 @@ For local development setup, troubleshooting, and advanced usage, see the dedica
 | ALLOWED_IFRAME_ORIGINS | Comma-separated list of origins allowed to embed the app in an iframe | None                              | No       |
 | UPLOAD_DIR             | Directory for uploads (Docker/production; should be `/app/uploads` in container) | None (see LOCAL_UPLOAD_DIR fallback)    | No       |
 | LOCAL_UPLOAD_DIR       | Directory for uploads (local dev, fallback: './local_uploads')   | ./local_uploads                         | No       |
+| FOOTER_LINKS           | Comma-separated custom footer links (Format: "Text @ URL")       | None                                    | No       |
 
 - **UPLOAD_DIR** is used in Docker/production. If not set, LOCAL_UPLOAD_DIR is used for local development. If neither is set, the default is `./local_uploads`.
 - **Docker Note:** The Dockerfile now only creates the `uploads` directory inside the container. The host's `./local_uploads` is mounted to `/app/uploads` and should be managed on the host system.

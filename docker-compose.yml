@@ -16,6 +16,7 @@ services:
             BASE_URL: http://localhost:3000  # The base URL for the application
             
             # Additional available environment variables (commented out with defaults)
+            # FOOTER_LINKS: "My Site @ https://example.com,Docs @ https://docs.example.com" # Custom footer links
             # PORT: 3000  # Server port (default: 3000)
             # NODE_ENV: production  # Node environment (development/production)
             # DEBUG: false  # Debug mode for verbose logging (default: false in production, true in development)
