@@ -50,9 +50,10 @@ CMD ["npm", "run", "dev"]
 # Production stage
 FROM deps as production
 ENV NODE_ENV=production
+ENV UPLOAD_DIR /app/uploads
 
 # Create upload directory
-RUN mkdir -p uploads
+# RUN mkdir -p uploads # No longer strictly needed here as volume mapping is expected, but harmless
 
 # Copy only necessary source files
 COPY src/ ./src/

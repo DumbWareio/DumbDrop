@@ -2,18 +2,34 @@
  * Main application setup and configuration.
  * Initializes Express app, middleware, routes, and static file serving.
  * Handles core application bootstrapping and configuration validation.
+ * Imports and makes use of the configured storage adapter.
  */
 
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const path = require('path');
-const fs = require('fs');
-const fsPromises = require('fs').promises;
+const fs = require('fs'); // Needed for reading HTML templates
 
+// Load configuration FIRST
 const { config, validateConfig } = require('./config');
 const logger = require('./utils/logger');
-const { ensureDirectoryExists } = require('./utils/fileUtils');
+// Validate config EARLY, before loading anything else that depends on it
+try {
+    validateConfig();
+    logger.info("Configuration loaded and validated successfully.");
+} catch (validationError) {
+     logger.error("!!! Configuration validation failed. Server cannot start. !!!");
+     logger.error(validationError.message);
+     process.exit(1); // Exit if config is invalid
+}
+
+// Load storage adapter AFTER config is validated
+// The storage/index.js file itself will log which adapter is being used.
+const { storageAdapter } = require('./storage'); // This will load the correct adapter
+
+// Load other utilities and middleware
+// const { ensureDirectoryExists } = require('./utils/fileUtils'); // No longer needed here
 const { securityHeaders, requirePin } = require('./middleware/security');
 const { safeCompare } = require('./utils/security');
 const { initUploadLimiter, pinVerifyLimiter, downloadLimiter } = require('./middleware/rateLimiter');
@@ -22,195 +38,147 @@ const { injectDemoBanner, demoMiddleware } = require('./utils/demoMode');
 // Create Express app
 const app = express();
 
-// Add this line to trust the first proxy
-app.set('trust proxy', 1);
+// Trust proxy headers (important for rate limiting and secure cookies if behind proxy)
+app.set('trust proxy', 1); // Adjust the number based on your proxy setup depth
 
-// Middleware setup
-app.use(cors());
+// --- Middleware Setup ---
+app.use(cors()); // TODO: Configure CORS more strictly for production if needed
 app.use(cookieParser());
-app.use(express.json());
-app.use(securityHeaders);
+app.use(express.json()); // For parsing application/json
+app.use(securityHeaders); // Apply security headers
 
-// Import routes
+// --- Demo Mode Middleware ---
+// Apply demo middleware early if demo mode is active
+// Note: Demo mode is now also checked within adapters/storage factory
+if (config.isDemoMode) {
+    app.use(demoMiddleware); // This might intercept routes if demoAdapter is fully implemented
+}
+
+// --- Route Definitions ---
+// Import route handlers AFTER middleware setup
+// Note: uploadRouter is now an object { router }, so destructure it
 const { router: uploadRouter } = require('./routes/upload');
 const fileRoutes = require('./routes/files');
 const authRoutes = require('./routes/auth');
 
-// Add demo middleware before your routes
-app.use(demoMiddleware);
-
-// Use routes with appropriate middleware
+// Apply Rate Limiting and Auth Middleware to Routes
 app.use('/api/auth', pinVerifyLimiter, authRoutes);
+// Apply PIN check and rate limiting to upload/file routes
+// The requirePin middleware now checks config.pin internally
 app.use('/api/upload', requirePin(config.pin), initUploadLimiter, uploadRouter);
 app.use('/api/files', requirePin(config.pin), downloadLimiter, fileRoutes);
 
-// Root route
+
+// --- Frontend Routes (Serving HTML) ---
+
+// Root route ('/')
 app.get('/', (req, res) => {
+  // Redirect to login if PIN is required and not authenticated
+  if (config.pin && (!req.cookies?.DUMBDROP_PIN || !safeCompare(req.cookies.DUMBDROP_PIN, config.pin))) {
+    logger.debug('[/] PIN required, redirecting to login.html');
+    return res.redirect('/login.html'); // Use relative path
+  }
+
   try {
-    // Check if the PIN is configured and the cookie exists
-    if (config.pin && (!req.cookies?.DUMBDROP_PIN || !safeCompare(req.cookies.DUMBDROP_PIN, config.pin))) {
-      return res.redirect('/login.html');
-    }
-    
-    let html = fs.readFileSync(path.join(__dirname, '../public', 'index.html'), 'utf8');
-    
-    // Standard replacements
+    const filePath = path.join(__dirname, '../public', 'index.html');
+    let html = fs.readFileSync(filePath, 'utf8');
+
+    // Perform template replacements
     html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
     html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
     html = html.replace('{{MAX_RETRIES}}', config.clientMaxRetries.toString());
-    // Ensure baseUrl has a trailing slash for correct asset linking
+    // Ensure baseUrl has a trailing slash
     const baseUrlWithSlash = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
     html = html.replace(/{{BASE_URL}}/g, baseUrlWithSlash);
-    
+
     // Generate Footer Content
-    let footerHtml = ''; // Initialize empty
+    let footerHtml = '';
     if (config.footerLinks && config.footerLinks.length > 0) {
-        // If custom links exist, use only them
-        footerHtml = config.footerLinks.map(link => 
+        footerHtml = config.footerLinks.map(link =>
             `<a href="${link.url}" target="_blank" rel="noopener noreferrer">${link.text}</a>`
         ).join('<span class="footer-separator"> | </span>');
     } else {
-        // Otherwise, use only the default static link
         footerHtml = `<span class="footer-static">Built by <a href="https://www.dumbware.io/" target="_blank" rel="noopener noreferrer">Dumbwareio</a></span>`;
     }
     html = html.replace('{{FOOTER_CONTENT}}', footerHtml);
 
-    // Inject demo banner if applicable
+    // Inject Demo Banner if needed
     html = injectDemoBanner(html);
 
-    // Send the final processed HTML
+    res.setHeader('Content-Type', 'text/html');
     res.send(html);
-
   } catch (err) {
-    logger.error(`Error processing index.html for / route: ${err.message}`);
-    // Check if headers have already been sent before trying to send an error response
-    if (!res.headersSent) {
-      res.status(500).send('Error loading page');
-    }
+    logger.error(`Error processing index.html: ${err.message}`);
+    res.status(500).send('Error loading page');
   }
 });
 
-// Login route
+// Login route ('/login.html')
 app.get('/login.html', (req, res) => {
-  // Add cache control headers
+  // Prevent caching of the login page
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
-  
-  let html = fs.readFileSync(path.join(__dirname, '../public', 'login.html'), 'utf8');
-  html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
-  // Ensure baseUrl has a trailing slash
-  const baseUrlWithSlash = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
-  html = html.replace(/{{BASE_URL}}/g, baseUrlWithSlash);
-  html = injectDemoBanner(html);
-  res.send(html);
-});
 
-// Serve static files with template variable replacement for HTML files
-app.use((req, res, next) => {
-  if (!req.path.endsWith('.html')) {
-    return next();
-  }
-  
   try {
-    const filePath = path.join(__dirname, '../public', req.path);
-    let html = fs.readFileSync(filePath, 'utf8');
-    html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
-    if (req.path === '/index.html' || req.path === 'index.html') {
-      html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
-      html = html.replace('{{MAX_RETRIES}}', config.clientMaxRetries.toString());
-    }
-    // Ensure baseUrl has a trailing slash
-    const baseUrlWithSlash = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
-    html = html.replace(/{{BASE_URL}}/g, baseUrlWithSlash);
-    html = injectDemoBanner(html);
-    res.send(html);
+      const filePath = path.join(__dirname, '../public', 'login.html');
+      let html = fs.readFileSync(filePath, 'utf8');
+      html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
+      const baseUrlWithSlash = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
+      html = html.replace(/{{BASE_URL}}/g, baseUrlWithSlash);
+      html = injectDemoBanner(html); // Inject demo banner if needed
+
+      res.setHeader('Content-Type', 'text/html');
+      res.send(html);
   } catch (err) {
-    next();
+       logger.error(`Error processing login.html: ${err.message}`);
+       res.status(500).send('Error loading login page');
   }
 });
 
-// Serve remaining static files
-app.use(express.static('public'));
+// --- Static File Serving ---
+// Serve static files (CSS, JS, assets) from the 'public' directory
+// Use express.static middleware, placed AFTER specific HTML routes
+app.use(express.static(path.join(__dirname, '../public')));
 
-// Error handling middleware
+
+// --- Error Handling Middleware ---
+// Catch-all for unhandled errors
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
-  logger.error(`Unhandled error: ${err.message}`);
-  // Check if headers have already been sent before trying to send an error response
-  if (res.headersSent) {
-    return next(err); // Pass error to default handler if headers sent
+  logger.error(`Unhandled application error: ${err.message}`, err.stack);
+  // Avoid sending stack trace in production
+  const errorResponse = {
+    message: 'Internal Server Error',
+    ...(config.nodeEnv === 'development' && { error: err.message, stack: err.stack })
+  };
+  // Ensure response is sent only once
+  if (!res.headersSent) {
+     res.status(err.status || 500).json(errorResponse);
   }
-  res.status(500).json({ 
-    message: 'Internal server error', 
-    error: process.env.NODE_ENV === 'development' ? err.message : undefined 
-  });
 });
 
-// --- Add this after config is loaded ---
-const METADATA_DIR = path.join(config.uploadDir, '.metadata');
-// --- End addition ---
-
+// --- Initialize Function (Simplified) ---
 /**
- * Initialize the application
- * Sets up required directories and validates configuration
+ * Initialize the application.
+ * Placeholder function, as most initialization is now handled
+ * by config loading, adapter loading, and server startup.
+ * Could be used for other async setup tasks if needed later.
  */
 async function initialize() {
   try {
-    // Validate configuration
-    validateConfig();
-    
-    // Ensure upload directory exists and is writable
-    await ensureDirectoryExists(config.uploadDir);
+    // Config validation happens at the top level now.
+    // Storage adapter is loaded at the top level now.
+    // Directory checks are handled within adapters/config.
 
-    // --- Add this section ---
-    // Ensure metadata directory exists
-    try {
-        if (!fs.existsSync(METADATA_DIR)) {
-            await fsPromises.mkdir(METADATA_DIR, { recursive: true });
-            logger.info(`Created metadata directory: ${METADATA_DIR}`);
-        } else {
-            logger.info(`Metadata directory exists: ${METADATA_DIR}`);
-        }
-         // Check writability (optional but good practice)
-        await fsPromises.access(METADATA_DIR, fs.constants.W_OK);
-         logger.success(`Metadata directory is writable: ${METADATA_DIR}`);
-    } catch (err) {
-        logger.error(`Metadata directory error (${METADATA_DIR}): ${err.message}`);
-        // Decide if this is fatal. If resumability is critical, maybe throw.
-        throw new Error(`Failed to access or create metadata directory: ${METADATA_DIR}`);
-    }
-    // --- End added section ---
-    
-    // Log configuration
-    logger.info(`Maximum file size set to: ${config.maxFileSize / (1024 * 1024)}MB`);
-    if (config.pin) {
-      logger.info('PIN protection enabled');
-    }
-    logger.info(`Auto upload is ${config.autoUpload ? 'enabled' : 'disabled'}`);
-    if (config.appriseUrl) {
-      logger.info('Apprise notifications enabled');
-    }
-    
-    // After initializing demo middleware
-    if (process.env.DEMO_MODE === 'true') {
-        logger.info('[DEMO] Running in demo mode - uploads will not be saved');
-        // Clear any existing files in upload directory
-        try {
-            const files = fs.readdirSync(config.uploadDir);
-            for (const file of files) {
-                fs.unlinkSync(path.join(config.uploadDir, file));
-            }
-            logger.info('[DEMO] Cleared upload directory');
-        } catch (err) {
-            logger.error(`[DEMO] Failed to clear upload directory: ${err.message}`);
-        }
-    }
-    
-    return app;
+    logger.info('Application initialized.');
+    // Example: Log active storage type
+    logger.info(`Active Storage Adapter: ${storageAdapter.constructor.name || config.storageType}`);
+
+    return app; // Return the configured Express app instance
   } catch (err) {
-    logger.error(`Initialization failed: ${err.message}`);
-    throw err;
+    logger.error(`Application initialization failed: ${err.message}`);
+    throw err; // Propagate error to stop server start
   }
 }
 
-module.exports = { app, initialize, config }; 
+module.exports = { app, initialize, config }; // Export app, initialize, and config
