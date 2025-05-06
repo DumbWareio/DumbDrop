@@ -210,6 +210,11 @@ const config = {
    * Parsed custom footer links
    * Set via FOOTER_LINKS in .env (e.g., "Link 1 @ URL1, Link 2 @ URL2")
    */
+  _footerLinksRaw: (() => {
+    const rawValue = process.env.FOOTER_LINKS;
+    console.log(`[CONFIG] Raw FOOTER_LINKS from process.env: '${rawValue}'`); 
+    return rawValue; // Keep the original flow, just log
+  })(),
   footerLinks: parseFooterLinks(process.env.FOOTER_LINKS),
   
   // =====================
