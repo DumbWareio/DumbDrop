@@ -1,152 +1,161 @@
 /**
- * File upload route handlers and batch upload management.
- * Handles file uploads, chunked transfers, and folder creation.
- * Manages upload sessions using persistent metadata for resumability.
+ * File upload route handlers.
+ * Delegates storage operations to the configured storage adapter.
+ * Handles multipart uploads via adapter logic.
  */
 
 const express = require('express');
 const router = express.Router();
+const path = require('path'); // Still needed for extension checks
 const { config } = require('../config');
 const logger = require('../utils/logger');
-const { isDemoMode } = require('../utils/demoMode');
-const { storageAdapter } = require('../storage'); // Import the storage adapter
-const { isValidBatchId } = require('../utils/fileUtils');
-const crypto = require('crypto'); // Keep crypto for demo mode uploadId
+const { storageAdapter } = require('../storage'); // Import the adapter factory's result
+const { isDemoMode } = require('../utils/demoMode'); // Keep demo check for specific route behavior if needed
 
 // --- Routes ---
 
 // Initialize upload
 router.post('/init', async (req, res) => {
-  // DEMO MODE CHECK - Bypass persistence if in demo mode
-  if (isDemoMode()) {
-    const { filename, fileSize } = req.body;
-    const uploadId = `demo-${crypto.randomBytes(16).toString('hex')}`;
-    logger.info(`[DEMO] Initialized upload for ${filename} (${fileSize} bytes) with ID ${uploadId}`);
-    // Simulate zero-byte completion for demo
-    if (Number(fileSize) === 0) {
-      logger.success(`[DEMO] Completed zero-byte file upload: ${filename}`);
-      // sendNotification(filename, 0, config); // In demo, notifications are typically skipped or mocked by demoAdapter
-    }
-    return res.json({ uploadId });
+  if (isDemoMode() && config.storageType !== 's3') { // S3 demo might still hit the adapter for presigned URLs etc.
+                                                   // but local demo can be simpler.
+     const { filename = 'demo_file.txt', fileSize = 0 } = req.body;
+     const demoUploadId = 'demo-' + Math.random().toString(36).substr(2, 9);
+     logger.info(`[DEMO /init] Req for ${filename}, size ${fileSize}. ID ${demoUploadId}`);
+     if (Number(fileSize) === 0) {
+        logger.success(`[DEMO /init] Sim complete zero-byte: ${filename}`);
+     }
+     return res.json({ uploadId: demoUploadId });
   }
 
   const { filename, fileSize } = req.body;
   const clientBatchId = req.headers['x-batch-id'];
 
-  // --- Basic validations ---
   if (!filename) return res.status(400).json({ error: 'Missing filename' });
   if (fileSize === undefined || fileSize === null) return res.status(400).json({ error: 'Missing fileSize' });
   const size = Number(fileSize);
   if (isNaN(size) || size < 0) return res.status(400).json({ error: 'Invalid file size' });
-  const maxSizeInBytes = config.maxFileSize;
-  if (size > maxSizeInBytes) return res.status(413).json({ error: 'File too large', limit: maxSizeInBytes });
 
-  // Validate clientBatchId if provided
-  if (clientBatchId && !isValidBatchId(clientBatchId)) {
-    return res.status(400).json({ error: 'Invalid batch ID format' });
+  if (size > config.maxFileSize) {
+    logger.warn(`Upload rejected: File size ${size} exceeds limit ${config.maxFileSize} for ${filename}`);
+    return res.status(413).json({ error: 'File too large', limit: config.maxFileSize });
+  }
+
+  if (config.allowedExtensions && config.allowedExtensions.length > 0) {
+    const fileExt = path.extname(filename).toLowerCase();
+    if (!fileExt || !config.allowedExtensions.includes(fileExt)) {
+      logger.warn(`Upload rejected: File type not allowed: ${filename} (Ext: ${fileExt || 'none'})`);
+      return res.status(400).json({ error: 'File type not allowed', receivedExtension: fileExt || 'none' });
+    }
+    logger.debug(`File extension ${fileExt} allowed for ${filename}`);
   }
 
   try {
-    const { uploadId } = await storageAdapter.initUpload(filename, size, clientBatchId);
-    logger.info(`[Route /init] Storage adapter initialized upload: ${uploadId} for ${filename}`);
-    res.json({ uploadId });
-
+    const result = await storageAdapter.initUpload(filename, size, clientBatchId);
+    res.json({ uploadId: result.uploadId });
   } catch (err) {
-    logger.error(`[Route /init] Upload initialization failed: ${err.message} ${err.stack}`);
-    // Check for specific error types if adapter throws them (e.g., size limit from adapter)
-    if (err.message.includes('File too large') || err.status === 413) {
-        return res.status(413).json({ error: 'File too large', details: err.message, limit: config.maxFileSize });
+    logger.error(`[Route /init] Upload initialization failed for "${filename}": ${err.name} - ${err.message}`, err.stack);
+    let statusCode = 500;
+    let clientMessage = 'Failed to initialize upload.';
+
+    if (err.message.includes('Invalid batch ID format')) {
+        statusCode = 400; clientMessage = err.message;
+    } else if (err.name === 'NoSuchBucket' || err.name === 'AccessDenied') {
+        statusCode = 500; clientMessage = 'Storage configuration error.';
+    } else if (err.code === 'EACCES' || err.code === 'EPERM' || err.message.includes('writable') || err.message.includes('metadata directory')) {
+         statusCode = 500; clientMessage = 'Storage permission or access error.';
+    } else if (err.message.includes('S3 Client configuration failed')) {
+        statusCode = 503; clientMessage = 'Storage service unavailable or misconfigured.';
     }
-    if (err.message.includes('File type not allowed') || err.status === 400) {
-        return res.status(400).json({ error: 'File type not allowed', details: err.message });
-    }
-    return res.status(500).json({ error: 'Failed to initialize upload via adapter', details: err.message });
+    res.status(statusCode).json({ error: clientMessage, details: config.nodeEnv === 'development' ? err.message : undefined });
   }
 });
 
 // Upload chunk
-router.post('/chunk/:uploadId', express.raw({ 
-  limit: config.maxFileSize + (10 * 1024 * 1024), // Generous limit for raw body
-  type: 'application/octet-stream' 
+router.post('/chunk/:uploadId', express.raw({
+  limit: config.maxFileSize + (10 * 1024 * 1024),
+  type: 'application/octet-stream'
 }), async (req, res) => {
-  // DEMO MODE CHECK
-  if (isDemoMode()) {
-    const { uploadId } = req.params;
-    logger.debug(`[DEMO] Received chunk for ${uploadId}`);
-    // Fake progress - requires knowing file size which isn't easily available here in demo
-    const demoProgress = Math.min(100, Math.random() * 100); // Placeholder
-    return res.json({ bytesReceived: 0, progress: demoProgress });
+  const { uploadId } = req.params;
+  const chunk = req.body;
+  const partNumber = parseInt(req.query.partNumber, 10); // Ensure partNumber is parsed
+
+  if (isNaN(partNumber) || partNumber < 1) {
+     logger.error(`[Route /chunk] Invalid partNumber for ${uploadId}: ${req.query.partNumber}`);
+     return res.status(400).json({ error: 'Missing or invalid partNumber query parameter (must be >= 1)' });
   }
 
-  const { uploadId } = req.params;
-  let chunk = req.body;
-  const chunkSize = chunk.length;
+  if (isDemoMode() && config.storageType !== 's3') {
+      logger.debug(`[DEMO /chunk] Chunk for ${uploadId}, part ${partNumber}, size ${chunk?.length || 0}`);
+      const demoProgress = Math.min(100, (Math.random() * 50) + (partNumber * 10) ); // Simulate increasing progress
+      const completed = demoProgress >= 100;
+      if (completed) logger.info(`[DEMO /chunk] Sim completion for ${uploadId}`);
+      return res.json({ bytesReceived: 0, progress: demoProgress, completed });
+  }
 
-  if (!chunkSize) return res.status(400).json({ error: 'Empty chunk received' });
+  if (!chunk || chunk.length === 0) {
+    logger.warn(`[Route /chunk] Empty chunk for ${uploadId}, part ${partNumber}`);
+    return res.status(400).json({ error: 'Empty chunk received' });
+  }
 
   try {
-    // Delegate to storage adapter
-    // The adapter's storeChunk should handle partNumber for S3 internally
-    const { bytesReceived, progress, completed } = await storageAdapter.storeChunk(uploadId, chunk);
-    logger.debug(`[Route /chunk] Stored chunk for ${uploadId}. Progress: ${progress}%, Completed by adapter: ${completed}`);
+    const result = await storageAdapter.storeChunk(uploadId, chunk, partNumber);
 
-    if (completed) {
-      logger.info(`[Route /chunk] Adapter reported completion for ${uploadId}. Finalizing...`);
+    if (result.completed) {
+      logger.info(`[Route /chunk] Part ${partNumber} for ${uploadId} triggered completion. Finalizing...`);
       try {
-        const finalizationResult = await storageAdapter.completeUpload(uploadId);
-        logger.success(`[Route /chunk] Successfully finalized upload ${uploadId}. Final path/key: ${finalizationResult.finalPath}`);
-        // The adapter's completeUpload method is responsible for sending notifications and cleaning its metadata.
-      } catch (completeErr) {
-        logger.error(`[Route /chunk] CRITICAL: Failed to finalize completed upload ${uploadId} after storing chunk: ${completeErr.message} ${completeErr.stack}`);
-        // If completeUpload fails, the client might retry the chunk.
-        // The adapter's storeChunk should be idempotent or handle this.
-        // We still return the progress of the chunk write to the client.
-        // The client will likely retry, or the user will see the upload stall at 100% if this was the last chunk.
-        // Consider what to return to client here. For now, return chunk progress but log server error.
-        // The 'completed' flag from storeChunk might cause client to stop sending if it thinks it's done.
-        // If completeUpload fails, maybe the response to client should indicate not fully complete yet?
-        // Let's return the original progress. The client will retry if needed.
-        return res.status(500).json({ error: 'Chunk processed but finalization failed on server.', details: completeErr.message, currentProgress: progress });
+          const completionResult = await storageAdapter.completeUpload(uploadId);
+          logger.success(`[Route /chunk] Finalized upload ${uploadId}. Path/Key: ${completionResult.finalPath}`);
+          return res.json({ bytesReceived: result.bytesReceived, progress: 100, completed: true });
+      } catch (completionError) {
+         logger.error(`[Route /chunk] CRITICAL: Failed to finalize ${uploadId} after part ${partNumber}: ${completionError.message}`, completionError.stack);
+         return res.status(500).json({ error: 'Upload chunk received, but failed to finalize.', details: config.nodeEnv === 'development' ? completionError.message : undefined });
       }
+    } else {
+      res.json({ bytesReceived: result.bytesReceived, progress: result.progress, completed: false });
     }
-    res.json({ bytesReceived, progress });
-
   } catch (err) {
-    logger.error(`[Route /chunk] Chunk upload failed for ${uploadId}: ${err.message} ${err.stack}`);
-    if (err.message.includes('Upload session not found')) {
-        return res.status(404).json({ error: 'Upload session not found or already completed', details: err.message });
+    logger.error(`[Route /chunk] Chunk upload failed for ${uploadId}, part ${partNumber}: ${err.name} - ${err.message}`, err.stack);
+    let statusCode = 500;
+    let clientMessage = 'Failed to process chunk.';
+
+    if (err.message.includes('Upload session not found') || err.name === 'NoSuchUpload' || err.code === 'ENOENT' || err.name === 'NotFound' || err.name === 'NoSuchKey') {
+      statusCode = 404; clientMessage = 'Upload session not found or already completed/aborted.';
+    } else if (err.name === 'InvalidPart' || err.name === 'InvalidPartOrder') {
+       statusCode = 400; clientMessage = 'Invalid upload chunk sequence or data.';
+    } else if (err.name === 'SlowDown' || (err.$metadata && err.$metadata.httpStatusCode === 503) ) {
+       statusCode = 429; clientMessage = 'Storage provider rate limit exceeded, please try again later.';
+    } else if (err.code === 'EACCES' || err.code === 'EPERM' ) {
+        statusCode = 500; clientMessage = 'Storage permission error while writing chunk.';
     }
-    // Don't delete adapter's metadata on generic chunk errors, let client retry or adapter's cleanup handle stale entries.
-    res.status(500).json({ error: 'Failed to process chunk via adapter', details: err.message });
+    res.status(statusCode).json({ error: clientMessage, details: config.nodeEnv === 'development' ? err.message : undefined });
   }
 });
 
 // Cancel upload
 router.post('/cancel/:uploadId', async (req, res) => {
-  // DEMO MODE CHECK
-  if (isDemoMode()) {
-    logger.info(`[DEMO] Upload cancelled: ${req.params.uploadId}`);
-    return res.json({ message: 'Upload cancelled (Demo)' });
+  const { uploadId } = req.params;
+
+  if (isDemoMode() && config.storageType !== 's3') {
+      logger.info(`[DEMO /cancel] Request for ${uploadId}`);
+      return res.json({ message: 'Upload cancelled (Demo)' });
   }
 
-  const { uploadId } = req.params;
-  logger.info(`[Route /cancel] Received cancel request for upload: ${uploadId}`);
-
+  logger.info(`[Route /cancel] Cancel request for upload: ${uploadId}`);
   try {
     await storageAdapter.abortUpload(uploadId);
-    logger.info(`[Route /cancel] Upload ${uploadId} cancelled via storage adapter.`);
-    res.json({ message: 'Upload cancelled or already complete' });
+    res.json({ message: 'Upload cancelled successfully or was already inactive.' });
   } catch (err) {
-    logger.error(`[Route /cancel] Error during upload cancellation for ${uploadId}: ${err.message}`);
-    // Adapters should handle "not found" gracefully or throw specific error
-    if (err.message.includes('not found')) { // Generic check
-        return res.status(404).json({ error: 'Upload not found or already processed', details: err.message });
+    logger.error(`[Route /cancel] Error during cancellation for ${uploadId}: ${err.name} - ${err.message}`, err.stack);
+    // Generally, client doesn't need to know if server-side abort failed catastrophically,
+    // as long as client stops sending. However, if it's a config error, 500 is appropriate.
+    let statusCode = err.name === 'NoSuchUpload' ? 200 : 500; // If not found, it's like success for client
+    let clientMessage = err.name === 'NoSuchUpload' ? 'Upload already inactive or not found.' : 'Failed to cancel upload on server.';
+    if (err.name === 'AccessDenied' || err.name === 'NoSuchBucket') {
+        clientMessage = 'Storage configuration error during cancel.';
+        statusCode = 500;
     }
-    res.status(500).json({ error: 'Failed to cancel upload via adapter' });
+    res.status(statusCode).json({ message: clientMessage, details: config.nodeEnv === 'development' ? err.message : undefined });
   }
 });
 
-module.exports = {
-  router
-  // Remove internal metadata/batch cleanup exports as they are adapter-specific now or not used by router
-};
+module.exports = { router }; // Only export the router object

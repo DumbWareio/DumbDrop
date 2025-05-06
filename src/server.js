@@ -1,125 +1,111 @@
 /**
  * Server entry point that starts the HTTP server and manages connections.
  * Handles graceful shutdown, connection tracking, and server initialization.
- * Provides development mode directory listing functionality.
  */
 
-const { app, initialize, config } = require('./app');
+const { app, initialize, config } = require('./app'); // config is now also exported from app.js
 const logger = require('./utils/logger');
-const fs = require('fs');
+const fs = require('fs'); // Keep for readdirSync if needed for local dev logging
 const { executeCleanup } = require('./utils/cleanup');
-const { generatePWAManifest } = require('./scripts/pwa-manifest-generator')
+const { generatePWAManifest } = require('./scripts/pwa-manifest-generator');
 
-// Track open connections
 const connections = new Set();
 
-/**
- * Start the server and initialize the application
- * @returns {Promise<http.Server>} The HTTP server instance
- */
 async function startServer() {
   try {
-    // Initialize the application
-    await initialize();
-    
-    // Start the server
+    await initialize(); // This will call validateConfig and load storage adapter via app.js
+
     const server = app.listen(config.port, () => {
       logger.info(`Server running at ${config.baseUrl}`);
-      logger.info(`Upload directory (for local adapter state/uploads): ${config.uploadDir}`);
-      
-      // List directory contents in development
-      if (config.nodeEnv === 'development') {
+      // ** MODIFIED LOGGING **
+      logger.info(`Active Storage Type: ${config.storageType}`);
+      logger.info(`Data Directory (for uploads or metadata): ${config.uploadDir}`);
+
+      if (config.nodeEnv === 'development' && config.storageType === 'local') {
         try {
-          const files = fs.readdirSync(config.uploadDir);
-          logger.info(`Current directory contents (${files.length} files):`);
-          files.forEach(file => {
-            logger.info(`- ${file}`);
-          });
+          // Only list contents if it's local storage and dev mode
+          if (fs.existsSync(config.uploadDir)) {
+            const files = fs.readdirSync(config.uploadDir);
+            logger.info(`Current local upload directory contents (${config.uploadDir}):`);
+            files.forEach(file => logger.info(`- ${file}`));
+          } else {
+            logger.warn(`Local upload directory ${config.uploadDir} does not exist for listing.`);
+          }
         } catch (err) {
-          logger.error(`Failed to list directory contents: ${err.message}`);
+          logger.error(`Failed to list local upload directory contents: ${err.message}`);
         }
       }
     });
 
-    // Dynamically generate PWA manifest into public folder
     generatePWAManifest();
 
-    // Track new connections
     server.on('connection', (connection) => {
       connections.add(connection);
-      connection.on('close', () => {
-        connections.delete(connection);
-      });
+      connection.on('close', () => connections.delete(connection));
     });
 
-    // Shutdown handler function
-    let isShuttingDown = false; // Prevent multiple shutdowns
+    let isShuttingDown = false;
     const shutdownHandler = async (signal) => {
       if (isShuttingDown) return;
       isShuttingDown = true;
       logger.info(`${signal} received. Shutting down gracefully...`);
-      
-      // Start a shorter force shutdown timer
       const forceShutdownTimer = setTimeout(() => {
-        logger.error('Force shutdown initiated');
+        logger.error('Force shutdown due to timeout.');
         process.exit(1);
-      }, 3000); // 3 seconds maximum for total shutdown
-      
+      }, 5000); // Increased slightly
+
       try {
-        // 1. Stop accepting new connections immediately
-        server.unref();
+        server.closeIdleConnections?.(); // Node 18+
         
-        // 2. Close all existing connections with a shorter timeout
-        const connectionClosePromises = Array.from(connections).map(conn => {
-          return new Promise(resolve => {
-            conn.end(() => {
-              connections.delete(conn);
-              resolve();
+        const closePromises = Array.from(connections).map(conn => new Promise(resolve => {
+            conn.on('close', resolve); // Ensure close event resolves
+            conn.destroy(); // Actively destroy connections
+        }));
+        
+        await Promise.race([
+            Promise.all(closePromises),
+            new Promise(resolve => setTimeout(resolve, 2000)) // Max 2s for connections
+        ]);
+        connections.clear();
+
+
+        await new Promise((resolve, reject) => {
+            server.close((err) => {
+                if (err) return reject(err);
+                logger.info('Server closed.');
+                resolve();
             });
-          });
         });
         
-        // Wait for connections to close with a timeout
-        await Promise.race([
-          Promise.all(connectionClosePromises),
-          new Promise(resolve => setTimeout(resolve, 1000)) // 1 second timeout for connections
-        ]);
+        await executeCleanup(1500); // Max 1.5s for cleanup
         
-        // 3. Close the server
-        await new Promise((resolve) => server.close(resolve));
-        logger.info('Server closed');
-        
-        // 4. Run cleanup tasks with a shorter timeout
-        await executeCleanup(1000); // 1 second timeout for cleanup
-        
-        // Clear the force shutdown timer since we completed gracefully
         clearTimeout(forceShutdownTimer);
-        process.exitCode = 0;
-        process.exit(0); // Ensure immediate exit
+        logger.info('Shutdown complete.');
+        process.exit(0);
       } catch (error) {
+        clearTimeout(forceShutdownTimer); // Clear timer on error too
         logger.error(`Error during shutdown: ${error.message}`);
         process.exit(1);
       }
     };
 
-    // Handle both SIGTERM and SIGINT
     process.on('SIGTERM', () => shutdownHandler('SIGTERM'));
     process.on('SIGINT', () => shutdownHandler('SIGINT'));
 
     return server;
   } catch (error) {
     logger.error('Failed to start server:', error);
+    // Ensure process exits if startServer itself fails before listener setup
+    process.exitCode = 1; 
     throw error;
   }
 }
 
-// Only start the server if this file is run directly
 if (require.main === module) {
   startServer().catch((error) => {
-    logger.error('Server failed to start:', error);
-    process.exitCode = 1;
-    throw error;
+    // Error already logged by startServer
+    // process.exitCode is already set if startServer throws
   });
 }
 
-module.exports = { app, startServer }; 
+module.exports = { app, startServer };
