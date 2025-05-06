@@ -72,6 +72,9 @@
         const AUTO_UPLOAD_STR = '{{AUTO_UPLOAD}}';
         const AUTO_UPLOAD = ['true', '1', 'yes'].includes(AUTO_UPLOAD_STR.toLowerCase());
 
+        // --- NEW: Variable to track active uploads ---
+        let activeUploadCount = 0;
+
         function generateBatchId() { return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`; }
         function formatFileSize(bytes) { if (bytes === 0) return '0 Bytes'; const k = 1024; const sizes = ['Bytes', 'KB', 'MB', 'GB']; const i = Math.floor(Math.log(bytes) / Math.log(k)); return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]; }
 
@@ -397,10 +400,22 @@
             let successfulUploads = 0, failedUploads = 0;
 
             for (const file of filesToUpload) {
+                 // --- NEW: Increment active upload counter ---
+                 activeUploadCount++;
                  const uploader = new FileUploader(file, batchId);
-                 try { if (await uploader.start()) successfulUploads++; else failedUploads++; }
-                 catch (error) { console.error(`Unhandled error for ${file.name}:`, error); failedUploads++; }
+                 try {
+                    if (await uploader.start()) successfulUploads++;
+                    else failedUploads++;
+                 }
+                 catch (error) {
+                    console.error(`Unhandled error for ${file.name}:`, error);
+                    failedUploads++;
+                 } finally {
+                    // --- NEW: Decrement active upload counter ---
+                    activeUploadCount--;
+                 }
             }
+            
             const totalFiles = filesToUpload.length;
             let msg = `Uploaded ${successfulUploads} of ${totalFiles} files`;
             let bg = successfulUploads === totalFiles ? "#4CAF50" : (successfulUploads > 0 ? "#ff9800" : "#f44336");
@@ -415,6 +430,19 @@
         function toggleTheme() { const c=document.documentElement.getAttribute('data-theme'); setTheme(c==='dark'?'light':'dark'); }
         const savedTheme = localStorage.getItem('theme'); const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches; setTheme(savedTheme || (prefersDark ? 'dark' : 'light'));
         updateFileList(); // Initialize list on load
+
+        // --- NEW: beforeunload event listener ---
+        window.addEventListener('beforeunload', function (e) {
+            if (activeUploadCount > 0) {
+                // Standard message for the confirmation dialog
+                const confirmationMessage = 'Uploads are in progress. If you leave this page, ongoing uploads will be interrupted. Are you sure you want to leave?';
+                
+                // For modern browsers:
+                e.returnValue = confirmationMessage;
+                // For older browsers:
+                return confirmationMessage;
+            }
+        });
     </script>
 </body>
 </html>
