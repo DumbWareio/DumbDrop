@@ -25,7 +25,7 @@ async function startServer() {
     // Start the server
     const server = app.listen(config.port, () => {
       logger.info(`Server running at ${config.baseUrl}`);
-      logger.info(`Upload directory: ${config.uploadDisplayPath}`);
+      logger.info(`Upload directory (for local adapter state/uploads): ${config.uploadDir}`);
       
       // List directory contents in development
       if (config.nodeEnv === 'development') {
