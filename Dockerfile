@@ -85,13 +85,17 @@ EXPOSE 3000
 
 # Production stage
 FROM deps as production
-USER root # Switch back to root for creating dirs and copying files
+USER root # Ensure we are root
 ENV NODE_ENV=production
 ENV UPLOAD_DIR /app/uploads
 
 # Create and own upload/data directories
-RUN mkdir -p /usr/src/app/local_uploads /usr/src/app/uploads && \
-    chown -R nodeuser:nodeuser /usr/src/app /usr/src/app/local_uploads /usr/src/app/uploads
+# Ensure /usr/src/app exists and is owned by nodeuser (should be from deps stage)
+# Then create subdirectories and ensure they are owned by nodeuser
+RUN mkdir -p /usr/src/app/local_uploads && \
+    mkdir -p /usr/src/app/uploads && \
+    chown -R nodeuser:nodeuser /usr/src/app/local_uploads && \
+    chown -R nodeuser:nodeuser /usr/src/app/uploads
 
 # Copy only necessary source files and ensure ownership
 COPY --chown=nodeuser:nodeuser src/ ./src/
