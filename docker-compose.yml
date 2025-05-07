@@ -14,12 +14,11 @@ services:
             DUMBDROP_PIN: 123456  # Optional PIN protection (4-10 digits, leave empty to disable)
             AUTO_UPLOAD: true  # Upload without clicking button
             BASE_URL: http://localhost:3000  # The base URL for the application
-            
+        
             # Additional available environment variables (commented out with defaults)
             # FOOTER_LINKS: "My Site @ https://example.com,Docs @ https://docs.example.com" # Custom footer links
             # PORT: 3000  # Server port (default: 3000)
             # NODE_ENV: production  # Node environment (development/production)
-            # DEBUG: false  # Debug mode for verbose logging (default: false in production, true in development)
             # APPRISE_URL: ""  # Apprise notification URL for upload notifications (default: none)
             # APPRISE_MESSAGE: "New file uploaded - {filename} ({size}), Storage used {storage}"  # Notification message template with placeholders: {filename}, {size}, {storage}
             # APPRISE_SIZE_UNIT: "Auto"  # Size unit for notifications (B, KB, MB, GB, TB, or Auto)
@@ -35,3 +34,9 @@ services:
         #   interval: 30s
         #   timeout: 10s
         #   retries: 3
+        # healthcheck:
+        #     test: ["CMD", "curl", "--fail", "http://localhost:3000/health"]
+        #     interval: 30s
+        #     timeout: 10s
+        #     retries: 3
+        #     start_period: 30s
