@@ -254,6 +254,4 @@ See [Local Development (Recommended Quick Start)](LOCAL_DEVELOPMENT.md) for loca
 Made with ❤️ by [DumbWare.io](https://dumbware.io)
 
 ## Future Features
-- Camera Upload for Mobile
 > Got an idea? [Open an issue](https://github.com/dumbwareio/dumbdrop/issues) or [submit a PR](https://github.com/dumbwareio/dumbdrop/pulls)
-```
