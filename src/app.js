@@ -136,6 +136,11 @@ app.get('/login.html', (req, res) => {
   }
 });
 
+// --- Health Check Endpoint ---
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'UP', message: 'Server is healthy' });
+});
+
 // --- Static File Serving ---
 // Serve static files (CSS, JS, assets) from the 'public' directory
 // Use express.static middleware, placed AFTER specific HTML routes
