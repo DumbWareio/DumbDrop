@@ -39,7 +39,7 @@ body {
     display: flex;
     justify-content: center;
     padding-top: 2rem;
-    padding-bottom: 80px;
+    padding-bottom: 150px;
     color: var(--text-color);
     transition: background-color 0.3s ease, color 0.3s ease;
 }
@@ -47,7 +47,7 @@ body {
 .container {
     width: 100%;
     max-width: 600px;
-    padding: 20px;
+    padding: 20px 20px 80px 20px;
     text-align: center;
     position: relative;
 }
@@ -364,20 +364,19 @@ button:disabled {
 /* Footer Styles */
 footer {
     position: fixed;
-    bottom: 10px;
+    bottom: 0;
     left: 0;
     right: 0;
     width: 100%;
-    max-width: 600px;
-    margin-left: auto;
-    margin-right: auto;
     padding: 15px;
     text-align: center;
     font-size: 0.85rem;
     color: var(--text-color);
-    opacity: 0.7;
+    opacity: 0.9;
     border-top: 1px solid var(--border-color);
     transition: background-color 0.3s ease, color 0.3s ease;
+    background-color: var(--bg-color);
+    z-index: 100;
 }
 
 footer a {

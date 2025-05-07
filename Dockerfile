@@ -87,6 +87,7 @@ EXPOSE 3000
 FROM deps as production
 USER root # Switch back to root for creating dirs and copying files
 ENV NODE_ENV=production
+ENV UPLOAD_DIR /app/uploads
 
 # Create and own upload/data directories
 RUN mkdir -p /usr/src/app/local_uploads /usr/src/app/uploads && \
