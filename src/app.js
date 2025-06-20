@@ -17,7 +17,7 @@ const logger = require('./utils/logger');
 const { ensureDirectoryExists } = require('./utils/fileUtils');
 const { getHelmetConfig, requirePin } = require('./middleware/security');
 const { safeCompare } = require('./utils/security');
-const { initUploadLimiter, pinVerifyLimiter, downloadLimiter } = require('./middleware/rateLimiter');
+const { initUploadLimiter, pinVerifyLimiter, pinStatusLimiter, downloadLimiter } = require('./middleware/rateLimiter');
 const { injectDemoBanner, demoMiddleware } = require('./utils/demoMode');
 const { originValidationMiddleware, getCorsOptions } = require('./middleware/cors');
 
@@ -41,6 +41,7 @@ app.use((req, res, next) => {
   const publicPaths = [
     '/login',
     '/login.html',
+    '/api/auth/logout',
     '/api/auth/verify-pin',
     '/api/auth/pin-required',
     '/api/auth/pin-length',
@@ -71,6 +72,9 @@ const fileRoutes = require('./routes/files');
 const authRoutes = require('./routes/auth');
 
 // Use routes with appropriate middleware
+// Apply strict rate limiting to PIN verification, but more permissive to status checks
+app.use('/api/auth/pin-required', pinStatusLimiter);
+app.use('/api/auth/logout', pinStatusLimiter);
 app.use('/api/auth', pinVerifyLimiter, authRoutes);
 app.use('/api/upload', requirePin(config.pin), initUploadLimiter, uploadRouter);
 app.use('/api/files', requirePin(config.pin), downloadLimiter, fileRoutes);

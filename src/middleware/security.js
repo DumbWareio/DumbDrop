@@ -48,16 +48,19 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 // }
 
 function getHelmetConfig() {
+  // const isSecure = BASE_URL.startsWith('https://');
+  
   return {
     noSniff: true, // Prevent MIME type sniffing
     frameguard: { action: 'deny' }, // Prevent clickjacking
-    hsts: { maxAge: 31536000, includeSubDomains: true }, // Enforce HTTPS for one year
-    crossOriginEmbedderPolicy: true,
-    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
-    crossOriginResourcePolicy: { policy: 'same-origin' },
+    crossOriginEmbedderPolicy: false, // Disable for local network access
+    crossOriginOpenerPolicy: false, // Disable to prevent warnings on HTTP
+    crossOriginResourcePolicy: { policy: 'cross-origin' }, // Allow cross-origin for local network
     referrerPolicy: { policy: 'no-referrer-when-downgrade' }, // Set referrer policy
     ieNoOpen: true, // Prevent IE from executing downloads
+    // hsts: isSecure ? { maxAge: 31536000, includeSubDomains: true } : false, // Only enforce HTTPS if using HTTPS
     // Disabled Helmet middlewares:
+    hsts: false,
     contentSecurityPolicy: false, // Disable CSP for now
     dnsPrefetchControl: true, // Disable DNS prefetching
     permittedCrossDomainPolicies: false,

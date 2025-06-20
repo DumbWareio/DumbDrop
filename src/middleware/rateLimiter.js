@@ -48,13 +48,31 @@ const chunkUploadLimiter = createLimiter({
 
 /**
  * Rate limiter for PIN verification attempts
- * Prevents brute force attacks
+ * Prevents brute force attacks on actual PIN verification
  */
 const pinVerifyLimiter = createLimiter({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 5, // 5 attempts per 15 minutes
   message: {
     error: 'Too many PIN verification attempts. Please try again later.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Apply strict rate limiting only to PIN verification, not PIN status checks
+  skip: (req) => {
+    return req.path === '/pin-required'; // Skip rate limiting for PIN requirement checks
+  }
+});
+
+/**
+ * Rate limiter for PIN status checks
+ * More permissive for checking if PIN is required
+ */
+const pinStatusLimiter = createLimiter({
+  windowMs: 60 * 1000, // 1 minute window
+  max: 30, // 30 requests per minute
+  message: {
+    error: 'Too many requests. Please wait before trying again.'
   },
   standardHeaders: true,
   legacyHeaders: false
@@ -78,5 +96,6 @@ module.exports = {
   initUploadLimiter,
   chunkUploadLimiter,
   pinVerifyLimiter,
+  pinStatusLimiter,
   downloadLimiter
 }; 
