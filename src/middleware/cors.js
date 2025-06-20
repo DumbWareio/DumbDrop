@@ -3,8 +3,7 @@ const NODE_ENV = process.env.NODE_ENV || 'production';
 let allowedOrigins = [];
 
 function setupOrigins(baseUrl) {
-    const normalizedBaseUrl = normalizeOrigin(baseUrl);
-    allowedOrigins = [ normalizedBaseUrl ];
+    allowedOrigins = [ baseUrl ];
 
     if (NODE_ENV === 'development' || ALLOWED_ORIGINS === '*') allowedOrigins = '*';
     else if (ALLOWED_ORIGINS && typeof ALLOWED_ORIGINS === 'string') {
