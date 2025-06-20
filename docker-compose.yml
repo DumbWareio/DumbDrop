@@ -2,6 +2,8 @@ services:
     dumbdrop:
         image: dumbwareio/dumbdrop:latest
         # build: .
+        container_name: dumbdrop 
+        restart: unless-stopped 
         ports:
             - 3000:3000
         volumes:

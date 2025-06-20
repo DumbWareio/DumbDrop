@@ -22,10 +22,11 @@ async function startServer() {
     // Initialize the application
     await initialize();
     
-    // Start the server
-    const server = app.listen(config.port, () => {
+    // Start the server - bind to 0.0.0.0 for Docker compatibility
+    const server = app.listen(config.port, '0.0.0.0', () => {
       logger.info(`Server running at ${config.baseUrl}`);
-      logger.info(`Upload directory: ${config.uploadDisplayPath}`);
+      logger.info(`Server listening on 0.0.0.0:${config.port}`);
+      logger.info(`Upload directory: ${config.uploadDir}`);
       
       // List directory contents in development
       if (config.nodeEnv === 'development') {

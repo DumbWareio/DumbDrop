@@ -117,12 +117,12 @@ const config = {
    * Port for the server (default: 3000)
    * Set via PORT in .env
    */
-  port: process.env.PORT,
+  port: PORT,
   /**
    * Node environment (default: 'production')
    * Set via NODE_ENV in .env
    */
-  nodeEnv: process.env.NODE_ENV,
+  nodeEnv: NODE_ENV,
   /**
    * Base URL for the app (default: http://localhost:${PORT})
    * Set via BASE_URL in .env
