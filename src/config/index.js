@@ -1,16 +1,5 @@
 require('dotenv').config();
-console.log('Loaded ENV:', {
-  PORT: process.env.PORT,
-  UPLOAD_DIR: process.env.UPLOAD_DIR,
-  LOCAL_UPLOAD_DIR: process.env.LOCAL_UPLOAD_DIR,
-  NODE_ENV: process.env.NODE_ENV
-});
-console.log('Loaded ENV:', {
-  PORT: process.env.PORT,
-  UPLOAD_DIR: process.env.UPLOAD_DIR,
-  LOCAL_UPLOAD_DIR: process.env.LOCAL_UPLOAD_DIR,
-  NODE_ENV: process.env.NODE_ENV
-});
+
 const { validatePin } = require('../utils/security');
 const logger = require('../utils/logger');
 const fs = require('fs');
@@ -33,7 +22,6 @@ const { version } = require('../../package.json'); // Get version from package.j
  * APPRISE_MESSAGE     - Notification message template (default provided)
  * APPRISE_SIZE_UNIT   - Size unit for notifications (optional)
  * ALLOWED_EXTENSIONS  - Comma-separated list of allowed file extensions (optional)
- * ALLOWED_IFRAME_ORIGINS - Comma-separated list of allowed iframe origins (optional)
  */
 
 // Helper for clear configuration logging
@@ -43,13 +31,20 @@ const logConfig = (message, level = 'info') => {
 };
 
 // Default configurations
-const DEFAULT_PORT = 3000;
 const DEFAULT_CHUNK_SIZE = 1024 * 1024 * 100; // 100MB
 const DEFAULT_SITE_TITLE = 'DumbDrop';
+const NODE_ENV = process.env.NODE_ENV || 'production';
 const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const DEFAULT_CLIENT_MAX_RETRIES = 5; // Default retry count
-
+console.log('Loaded ENV:', {
+  PORT,
+  UPLOAD_DIR: process.env.UPLOAD_DIR,
+  LOCAL_UPLOAD_DIR: process.env.LOCAL_UPLOAD_DIR,
+  NODE_ENV,
+  BASE_URL,
+  ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || '*',
+});
 const logAndReturn = (key, value, isDefault = false) => {
   logConfig(`${key}: ${value}${isDefault ? ' (default)' : ''}`);
   return value;
@@ -122,12 +117,12 @@ const config = {
    * Port for the server (default: 3000)
    * Set via PORT in .env
    */
-  port: process.env.PORT || DEFAULT_PORT,
+  port: process.env.PORT,
   /**
    * Node environment (default: 'development')
    * Set via NODE_ENV in .env
    */
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv: process.env.NODE_ENV || 'production',
   /**
    * Base URL for the app (default: http://localhost:${PORT})
    * Set via BASE_URL in .env
@@ -212,10 +207,6 @@ const config = {
     process.env.ALLOWED_EXTENSIONS.split(',').map(ext => ext.trim().toLowerCase()) : 
     null,
 
-  allowedIframeOrigins: process.env.ALLOWED_IFRAME_ORIGINS
-    ? process.env.ALLOWED_IFRAME_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
-    : null,
-
   /**
    * Max number of retries for client-side chunk uploads (default: 5)
    * Set via CLIENT_MAX_RETRIES in .env
@@ -252,7 +243,6 @@ function validateConfig() {
 
   // Validate BASE_URL format
   try {
-    let url = new URL(config.baseUrl);
     // Ensure BASE_URL ends with a slash
     if (!config.baseUrl.endsWith('/')) {
       logger.warn('BASE_URL did not end with a trailing slash. Automatically appending "/".');
