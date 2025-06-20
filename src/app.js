@@ -41,8 +41,23 @@ const app = express();
 // Trust proxy headers (important for rate limiting and secure cookies if behind proxy)
 app.set('trust proxy', 1); // Adjust the number based on your proxy setup depth
 
-// --- Middleware Setup ---
-app.use(cors()); // TODO: Configure CORS more strictly for production if needed
+// Middleware setup
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman)
+    if (!origin) return callback(null, true);
+    
+    if (config.allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    } else {
+      logger.warn(`CORS blocked request from origin: ${origin}`);
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Pin', 'X-Batch-ID']
+}));
 app.use(cookieParser());
 app.use(express.json()); // For parsing application/json
 app.use(securityHeaders); // Apply security headers
@@ -136,19 +151,13 @@ app.get('/login.html', (req, res) => {
   }
 });
 
-// --- Health Check Endpoint ---
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'UP', message: 'Server is healthy' });
-});
+// Serve remaining static files
+app.use(express.static('public'));
 
-// --- Static File Serving ---
-// Serve static files (CSS, JS, assets) from the 'public' directory
-// Use express.static middleware, placed AFTER specific HTML routes
-app.use(express.static(path.join(__dirname, '../public')));
+// Serve toastify files from node_modules
+app.use('/toastify', express.static(path.join(__dirname, '../node_modules/toastify-js/src')));
 
-
-// --- Error Handling Middleware ---
-// Catch-all for unhandled errors
+// Error handling middleware
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   logger.error(`Unhandled application error: ${err.message}`, err.stack);
   // Avoid sending stack trace in production

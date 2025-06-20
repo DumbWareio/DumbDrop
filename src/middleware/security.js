@@ -12,13 +12,17 @@ const { config } = require('../config');
  * Security headers middleware
  */
 function securityHeaders(req, res, next) {
-  // Content Security Policy
+  // Content Security Policy - Updated to fix PIN input issues
+  // We're temporarily keeping unsafe-inline for styles until we move all inline styles
   let csp =
     "default-src 'self'; " +
     "connect-src 'self'; " +
-    "style-src 'self' 'unsafe-inline' cdn.jsdelivr.net; " +
-    "script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; " +
-    "img-src 'self' data: blob:;";
+    "style-src 'self' 'unsafe-inline'; " +
+    "script-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data: blob:; " +
+    "font-src 'self' data:; " +
+    "object-src 'none'; " +
+    "base-uri 'self';";
 
   // If allowedIframeOrigins is set, allow those origins to embed via iframe
   if (config.allowedIframeOrigins && config.allowedIframeOrigins.length > 0) {
@@ -34,6 +38,7 @@ function securityHeaders(req, res, next) {
   res.setHeader('Content-Security-Policy', csp);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
   // Strict Transport Security (when in production)
   if (process.env.NODE_ENV === 'production') {

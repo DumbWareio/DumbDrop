@@ -135,7 +135,9 @@
                 
                 // Simplified success and error handling
                 if (data.success) {
-                    window.location.href = '/';
+                    // Use server-provided redirect URL to prevent race conditions
+                    const redirectUrl = data.redirectUrl || '/';
+                    window.location.href = redirectUrl;
                 } else {
                     // Show error message
                     document.getElementById('pin-error').textContent = data.error || 'Authentication failed';

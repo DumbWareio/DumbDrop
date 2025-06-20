@@ -122,6 +122,29 @@ const config = {
   allowedExtensions: process.env.ALLOWED_EXTENSIONS ?
     process.env.ALLOWED_EXTENSIONS.split(',').map(ext => ext.trim().toLowerCase().replace(/^\./, '.')).filter(Boolean) :
     null,
+
+  /**
+   * Allowed CORS origins (comma-separated, optional)
+   * Set via ALLOWED_ORIGINS in .env
+   * Defaults to localhost and 127.0.0.1 variants if not specified
+   */
+  allowedOrigins: process.env.ALLOWED_ORIGINS ? 
+    process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean) : 
+    [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://localhost:5050',
+      'http://127.0.0.1:5050'
+    ],
+
+  allowedIframeOrigins: process.env.ALLOWED_IFRAME_ORIGINS
+    ? process.env.ALLOWED_IFRAME_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
+    : null,
+
+  /**
+   * Max number of retries for client-side chunk uploads (default: 5)
+   * Set via CLIENT_MAX_RETRIES in .env
+   */
   clientMaxRetries: (() => {
     const retries = parseInt(process.env.CLIENT_MAX_RETRIES || DEFAULT_CLIENT_MAX_RETRIES, 10);
     return (isNaN(retries) || retries < 0) ? DEFAULT_CLIENT_MAX_RETRIES : retries;

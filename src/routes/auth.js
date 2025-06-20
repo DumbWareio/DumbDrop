@@ -28,7 +28,12 @@ router.post('/verify-pin', (req, res) => {
         sameSite: 'strict',
         path: '/'
       });
-      return res.json({ success: true, error: null });
+      const redirectUrl = req.query.redirect || '/';
+      return res.json({ 
+        success: true, 
+        error: null,
+        redirectUrl: redirectUrl
+      });
     }
 
     // Validate PIN format
@@ -69,7 +74,14 @@ router.post('/verify-pin', (req, res) => {
       });
 
       logger.info(`Successful PIN verification from IP: ${ip}`);
-      res.json({ success: true, error: null });
+      
+      // Return success with redirect URL controlled by server
+      const redirectUrl = req.query.redirect || '/';
+      res.json({ 
+        success: true, 
+        error: null,
+        redirectUrl: redirectUrl
+      });
     } else {
       // Record failed attempt
       const attempts = recordAttempt(ip);
