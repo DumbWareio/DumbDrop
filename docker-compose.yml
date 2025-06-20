@@ -1,6 +1,7 @@
 services:
     dumbdrop:
         image: dumbwareio/dumbdrop:latest
+        # build: .
         ports:
             - 3000:3000
         volumes:
