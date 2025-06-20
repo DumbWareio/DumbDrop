@@ -152,7 +152,7 @@ app.get('/login.html', (req, res) => {
 });
 
 // Serve remaining static files
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, '../public')));
 
 // Serve toastify files from node_modules
 app.use('/toastify', express.static(path.join(__dirname, '../node_modules/toastify-js/src')));
