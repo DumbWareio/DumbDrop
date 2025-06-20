@@ -150,9 +150,6 @@ const config = {
     return (isNaN(retries) || retries < 0) ? DEFAULT_CLIENT_MAX_RETRIES : retries;
   })(),
   pin: validatePin(process.env.DUMBDROP_PIN), // validatePin uses logger, ensure logger is available
-  allowedIframeOrigins: process.env.ALLOWED_IFRAME_ORIGINS ?
-    process.env.ALLOWED_IFRAME_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean) :
-    null,
   siteTitle: process.env.DUMBDROP_TITLE || DEFAULT_SITE_TITLE,
   footerLinks: parseFooterLinks(process.env.FOOTER_LINKS),
   appriseUrl: process.env.APPRISE_URL || null,
