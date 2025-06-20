@@ -1,4 +1,4 @@
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS || '*';
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS || process.env.ALLOWED_IFRAME_ORIGINS || '*';
 const NODE_ENV = process.env.NODE_ENV || 'production';
 let allowedOrigins = [];
 
@@ -61,7 +61,7 @@ function validateOrigin(origin) {
 }
 
 function originValidationMiddleware(req, res, next) {
-  const origin = req.headers.referer || `${req.protocol}://${req.headers.host}`;
+  const origin = req.headers.origin || req.headers.referer || `${req.protocol}://${req.headers.host}`;
   const isOriginValid = validateOrigin(origin);
   if (isOriginValid) {
       next();

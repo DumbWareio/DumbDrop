@@ -21,6 +21,7 @@ services:
             # Comma-separated list of allowed origins for CORS
             # (default: '*' if empty, replace with your base_url if you want to restrict only to base_url)
             # When adding multiple origins, base_url will be included by default and does not need to the list
+            # ALLOWED_IFRAME_ORIGINS: #DEPRECATED and will be used as ALLOWED_ORIGINS if SET
             # ALLOWED_ORIGINS: http://internalip:port,https://subdomain.example.com
 
             # Additional available environment variables (commented out with defaults)
