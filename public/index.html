@@ -4,12 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{SITE_TITLE}} - Simple File Upload</title>
-    <link rel="stylesheet" href="{{BASE_URL}}styles.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
-    <link rel="manifest" href="{{BASE_URL}}manifest.json">
-    <link rel="icon" type="image/svg+xml" href="{{BASE_URL}}assets/icon.svg">
-    <script>window.BASE_URL = '{{BASE_URL}}';</script>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="toastify/toastify.css">
+    <script src="toastify/toastify.js"></script>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
 </head>
 <body>
     <div class="container">
@@ -156,7 +155,7 @@
 
                 // Remove leading slash from API path before concatenating
                 const apiUrl = '/api/upload/init'.startsWith('/') ? '/api/upload/init'.substring(1) : '/api/upload/init';
-                const response = await fetch(window.BASE_URL + apiUrl, {
+                const response = await fetch(apiUrl, {
                     method: 'POST',
                     headers,
                     body: JSON.stringify({
@@ -219,7 +218,7 @@
                         const controller = new AbortController();
                         const timeoutId = setTimeout(() => controller.abort(), 30000); // 30-second timeout per attempt
 
-                        const response = await fetch(window.BASE_URL + chunkApiUrl, {
+                        const response = await fetch(chunkApiUrl, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/octet-stream',
@@ -395,7 +394,7 @@
                      const cancelApiUrlPath = `/api/upload/cancel/${this.uploadId}`;
                      const cancelApiUrl = cancelApiUrlPath.startsWith('/') ? cancelApiUrlPath.substring(1) : cancelApiUrlPath;
                     // No need to wait for response here, just fire and forget
-                    fetch(window.BASE_URL + cancelApiUrl, { method: 'POST' }).catch(err => {
+                    fetch(cancelApiUrl, { method: 'POST' }).catch(err => {
                          console.warn(`Sending cancel request failed for upload ${this.uploadId}:`, err);
                     });
                 } catch (cancelError) {

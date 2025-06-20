@@ -11,7 +11,9 @@ const {
   MAX_ATTEMPTS,
   LOCKOUT_DURATION 
 } = require('../utils/security');
-
+const PORT = process.env.PORT || 3000;
+const NODE_ENV = process.env.NODE_ENV || 'production';
+const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 /**
  * Verify PIN
  */
@@ -22,13 +24,14 @@ router.post('/verify-pin', (req, res) => {
   try {
     // If no PIN is set in config, always return success
     if (!config.pin) {
-      res.cookie('DUMBDROP_PIN', '', {
-        httpOnly: true,
-        secure: req.secure || (process.env.NODE_ENV === 'production' && config.baseUrl.startsWith('https')),
-        sameSite: 'strict',
-        path: '/'
-      });
-      return res.json({ success: true, error: null });
+      // res.cookie('DUMBDROP_PIN', '', {
+      //   httpOnly: true,
+      //   secure: req.secure || (BASE_URL.startsWith('https') && NODE_ENV === 'production'),
+      //   sameSite: 'strict',
+      //   path: '/'
+      // });
+      res.clearCookie('DUMBDROP_PIN', { path: '/' });
+      return res.json({ success: true, error: null, path: '/' });
     }
 
     // Validate PIN format
@@ -63,7 +66,7 @@ router.post('/verify-pin', (req, res) => {
       // Set secure cookie with cleaned PIN
       res.cookie('DUMBDROP_PIN', cleanedPin, {
         httpOnly: true,
-        secure: req.secure || (process.env.NODE_ENV === 'production' && config.baseUrl.startsWith('https')),
+        secure: req.secure || (BASE_URL.startsWith('https') && NODE_ENV === 'production'),
         sameSite: 'strict',
         path: '/'
       });

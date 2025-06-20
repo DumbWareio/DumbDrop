@@ -14,30 +14,58 @@ const fsPromises = require('fs').promises;
 const { config, validateConfig } = require('./config');
 const logger = require('./utils/logger');
 const { ensureDirectoryExists } = require('./utils/fileUtils');
-const { securityHeaders, requirePin } = require('./middleware/security');
+const { requirePin } = require('./middleware/security');
 const { safeCompare } = require('./utils/security');
 const { initUploadLimiter, pinVerifyLimiter, downloadLimiter } = require('./middleware/rateLimiter');
 const { injectDemoBanner, demoMiddleware } = require('./utils/demoMode');
+const { originValidationMiddleware, getCorsOptions } = require('./middleware/cors');
 
 // Create Express app
 const app = express();
+const PORT = process.env.PORT || 3000;
+const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
 // Add this line to trust the first proxy
 app.set('trust proxy', 1);
 
 // Middleware setup
-app.use(cors());
+app.use(cors(getCorsOptions(BASE_URL)));
 app.use(cookieParser());
 app.use(express.json());
-app.use(securityHeaders);
+// --- AUTHENTICATION MIDDLEWARE FOR ALL PROTECTED ROUTES ---
+app.use((req, res, next) => {
+  // List of paths that should be publicly accessible
+  const publicPaths = [
+    '/login',
+    '/login.html',
+    '/api/auth/verify-pin',
+    '/api/auth/pin-required',
+    '/api/auth/pin-length',
+    '/pin-length',
+    '/verify-pin',
+    '/config.js',
+    '/assets/',
+    '/styles.css',
+    '/manifest.json',
+    '/asset-manifest.json',
+    '/toastify',
+  ];
+
+  // Check if the current path matches any of the public paths
+  if (publicPaths.some(path => req.path.startsWith(path))) {
+      return next();
+  }
+
+  // For all other paths, apply both origin validation and auth middleware
+  originValidationMiddleware(req, res, () => {
+    demoMiddleware(req, res, next);
+  });
+});
 
 // Import routes
 const { router: uploadRouter } = require('./routes/upload');
 const fileRoutes = require('./routes/files');
 const authRoutes = require('./routes/auth');
-
-// Add demo middleware before your routes
-app.use(demoMiddleware);
 
 // Use routes with appropriate middleware
 app.use('/api/auth', pinVerifyLimiter, authRoutes);
@@ -55,9 +83,6 @@ app.get('/', (req, res) => {
   html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
   html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
   html = html.replace('{{MAX_RETRIES}}', config.clientMaxRetries.toString());
-  // Ensure baseUrl has a trailing slash for correct asset linking
-  const baseUrlWithSlash = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
-  html = html.replace(/{{BASE_URL}}/g, baseUrlWithSlash);
   html = injectDemoBanner(html);
   res.send(html);
 });
@@ -71,9 +96,6 @@ app.get('/login.html', (req, res) => {
   
   let html = fs.readFileSync(path.join(__dirname, '../public', 'login.html'), 'utf8');
   html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
-  // Ensure baseUrl has a trailing slash
-  const baseUrlWithSlash = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
-  html = html.replace(/{{BASE_URL}}/g, baseUrlWithSlash);
   html = injectDemoBanner(html);
   res.send(html);
 });
@@ -104,6 +126,8 @@ app.use((req, res, next) => {
 
 // Serve remaining static files
 app.use(express.static('public'));
+// Serve Toastify assets under /toastify
+app.use('/toastify', express.static(path.join(__dirname, '../node_modules/toastify-js/src')));
 
 // Error handling middleware
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars

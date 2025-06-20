@@ -46,7 +46,8 @@ const logConfig = (message, level = 'info') => {
 const DEFAULT_PORT = 3000;
 const DEFAULT_CHUNK_SIZE = 1024 * 1024 * 100; // 100MB
 const DEFAULT_SITE_TITLE = 'DumbDrop';
-const DEFAULT_BASE_URL = 'http://localhost:3000';
+const PORT = process.env.PORT || 3000;
+const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const DEFAULT_CLIENT_MAX_RETRIES = 5; // Default retry count
 
 const logAndReturn = (key, value, isDefault = false) => {
@@ -131,7 +132,7 @@ const config = {
    * Base URL for the app (default: http://localhost:${PORT})
    * Set via BASE_URL in .env
    */
-  baseUrl: process.env.BASE_URL || DEFAULT_BASE_URL,
+  baseUrl: BASE_URL,
   
   // =====================
   // =====================

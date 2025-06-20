@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{SITE_TITLE}} - Login</title>
-    <link rel="stylesheet" href="{{BASE_URL}}styles.css">
-    <link rel="icon" type="image/svg+xml" href="{{BASE_URL}}assets/icon.svg">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/svg+xml" href="assets/icon.svg">
     <style>
         .login-container {
             display: flex;
@@ -54,7 +54,6 @@
             background-color: var(--textarea-bg);
         }
     </style>
-    <script>window.BASE_URL = '{{BASE_URL}}';</script>
 </head>
 <body>
     <div class="login-container">
@@ -126,10 +125,12 @@
         // Handle form submission
         const verifyPin = async (pin) => {
             try {
-                const response = await fetch(window.BASE_URL + 'api/auth/verify-pin', {
+                const response = await fetch('/api/auth/verify-pin', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pin })
+                    body: JSON.stringify({ pin }),
+                    credentials: 'include', // Ensure cookies are sent
+                    // redirect: 'follow' // Follow server redirects
                 });
                 const data = await response.json();
                 
@@ -212,7 +213,7 @@
         };
 
         // Check PIN length and initialize
-        fetch(window.BASE_URL + 'api/auth/pin-required')
+        fetch('/api/auth/pin-required')
             .then(response => {
                 if (response.status === 429) {
                     throw new Error('Too many attempts. Please wait before trying again.');
@@ -241,17 +242,6 @@
                     pinContainer.style.pointerEvents = 'none';
                 }
             });
-
-        document.addEventListener('DOMContentLoaded', function() {
-            // Rewrite asset URLs to use BASE_URL as prefix if not absolute
-            const baseUrl = window.BASE_URL;
-            document.querySelectorAll('link[rel="stylesheet"], link[rel="icon"]').forEach(link => {
-                const href = link.getAttribute('href');
-                if (href && !href.startsWith('http') && !href.startsWith('data:') && !href.startsWith(baseUrl)) {
-                    link.setAttribute('href', baseUrl + href.replace(/^\//, ''));
-                }
-            });
-        });
     </script>
 </body>
 </html>
