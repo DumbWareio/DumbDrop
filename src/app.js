@@ -151,11 +151,16 @@ app.get('/login.html', (req, res) => {
   }
 });
 
+// Health check endpoint (for monitoring and load balancers)
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// Serve toastify files from node_modules (must come before general static files)
+app.use('/toastify', express.static(path.join(__dirname, '../node_modules/toastify-js/src')));
+
 // Serve remaining static files
 app.use(express.static(path.join(__dirname, '../public')));
-
-// Serve toastify files from node_modules
-app.use('/toastify', express.static(path.join(__dirname, '../node_modules/toastify-js/src')));
 
 // Error handling middleware
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
