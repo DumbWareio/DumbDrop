@@ -125,6 +125,10 @@ See `.env.example` for a template and more details.
 <details>
 <summary>ALLOWED_IFRAME_ORIGINS (DEPRECATED: see ALLOWED_ORIGINS)</summary>
 
+- This is now deprecated but still works for backwards compatibility
+- ALLOWED_IFRAME_ORIGINS will be used as a fallback if ALLOWED_ORIGINS is not set
+- Please update to ALLOWED_ORIGINS for future compatibility
+
 ~~To allow this app to be embedded in an iframe on specific origins (such as Organizr), set the `ALLOWED_IFRAME_ORIGINS` environment variable. For example:~~
 
 ```env
