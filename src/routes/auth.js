@@ -13,6 +13,25 @@ const {
 } = require('../utils/security');
 
 /**
+ * Validate redirect URL to prevent open redirect attacks
+ * Only allows relative URLs starting with '/' and rejects external URLs
+ */
+function validateRedirectUrl(url) {
+  if (!url || typeof url !== 'string') {
+    return '/';
+  }
+  
+  // Only allow relative URLs that start with '/'
+  // This prevents external URLs like 'https://evil.com' or protocol-relative URLs like '//evil.com'
+  if (url.startsWith('/') && !url.startsWith('//')) {
+    return url;
+  }
+  
+  // Default to root path for any suspicious URLs
+  return '/';
+}
+
+/**
  * Verify PIN
  */
 router.post('/verify-pin', (req, res) => {
@@ -28,7 +47,7 @@ router.post('/verify-pin', (req, res) => {
         sameSite: 'strict',
         path: '/'
       });
-      const redirectUrl = req.query.redirect || '/';
+      const redirectUrl = validateRedirectUrl(req.query.redirect);
       return res.json({ 
         success: true, 
         error: null,
@@ -76,7 +95,7 @@ router.post('/verify-pin', (req, res) => {
       logger.info(`Successful PIN verification from IP: ${ip}`);
       
       // Return success with redirect URL controlled by server
-      const redirectUrl = req.query.redirect || '/';
+      const redirectUrl = validateRedirectUrl(req.query.redirect);
       res.json({ 
         success: true, 
         error: null,
