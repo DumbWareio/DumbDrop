@@ -9,11 +9,11 @@ const logger = require('../utils/logger');
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'production';
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
-// const { config } = require('../config');
 
+// const { config } = require('../config');
 /**
  * Security headers middleware
- * DEPRECATED
+ * DEPRECATED: Use helmet middleware instead for security headers
  */
 // function securityHeaders(req, res, next) {
 //   // Content Security Policy
@@ -46,6 +46,25 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
 //   next();
 // }
+
+function getHelmetConfig() {
+  return {
+    noSniff: true, // Prevent MIME type sniffing
+    frameguard: { action: 'deny' }, // Prevent clickjacking
+    hsts: { maxAge: 31536000, includeSubDomains: true }, // Enforce HTTPS for one year
+    crossOriginEmbedderPolicy: true,
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+    crossOriginResourcePolicy: { policy: 'same-origin' },
+    referrerPolicy: { policy: 'no-referrer-when-downgrade' }, // Set referrer policy
+    ieNoOpen: true, // Prevent IE from executing downloads
+    // Disabled Helmet middlewares:
+    contentSecurityPolicy: false, // Disable CSP for now
+    dnsPrefetchControl: true, // Disable DNS prefetching
+    permittedCrossDomainPolicies: false,
+    originAgentCluster: false,
+    xssFilter: false,
+  };
+}
 
 /**
  * PIN protection middleware
@@ -86,6 +105,7 @@ function requirePin(PIN) {
 }
 
 module.exports = {
-  // securityHeaders,
+  // securityHeaders, // Deprecated, use helmet instead
+  getHelmetConfig,
   requirePin
 }; 

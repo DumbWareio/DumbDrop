@@ -1,5 +1,5 @@
 # Base stage for shared configurations
-FROM node:20-alpine as base
+FROM node:22-alpine as base
 
 # Install python and create virtual environment with minimal dependencies
 RUN apk add --no-cache python3 py3-pip && \

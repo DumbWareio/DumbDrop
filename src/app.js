@@ -6,6 +6,7 @@
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
@@ -14,7 +15,7 @@ const fsPromises = require('fs').promises;
 const { config, validateConfig } = require('./config');
 const logger = require('./utils/logger');
 const { ensureDirectoryExists } = require('./utils/fileUtils');
-const { requirePin } = require('./middleware/security');
+const { getHelmetConfig, requirePin } = require('./middleware/security');
 const { safeCompare } = require('./utils/security');
 const { initUploadLimiter, pinVerifyLimiter, downloadLimiter } = require('./middleware/rateLimiter');
 const { injectDemoBanner, demoMiddleware } = require('./utils/demoMode');
@@ -32,6 +33,8 @@ app.set('trust proxy', 1);
 app.use(cors(getCorsOptions(BASE_URL)));
 app.use(cookieParser());
 app.use(express.json());
+app.use(helmet(getHelmetConfig()));
+
 // --- AUTHENTICATION MIDDLEWARE FOR ALL PROTECTED ROUTES ---
 app.use((req, res, next) => {
   // List of paths that should be publicly accessible

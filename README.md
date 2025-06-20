@@ -7,6 +7,7 @@ A stupid simple file upload application that provides a clean, modern interface 
 No auth (unless you want it now!), no storage, no nothing. Just a simple file uploader to drop dumb files into a dumb folder.
 
 ## Table of Contents
+
 - [Quick Start](#quick-start)
 - [Production Deployment with Docker](#production-deployment-with-docker)
 - [Local Development (Recommended Quick Start)](LOCAL_DEVELOPMENT.md)
@@ -21,44 +22,51 @@ No auth (unless you want it now!), no storage, no nothing. Just a simple file up
 ## Quick Start
 
 ### Option 1: Docker (For Dummies)
+
 ```bash
 # Pull and run with one command
 docker run -p 3000:3000 -v ./uploads:/app/uploads dumbwareio/dumbdrop:latest
 ```
+
 1. Go to http://localhost:3000
 2. Upload a File - It'll show up in ./uploads
 3. Celebrate on how dumb easy this was
 
 ### Option 2: Docker Compose (For Dummies who like customizing)
+
 Create a `docker-compose.yml` file:
+
 ```yaml
 services:
-    dumbdrop:
-        image: dumbwareio/dumbdrop:latest
-        ports:
-            - 3000:3000
-        volumes:
-            # Where your uploaded files will land
-            - ./uploads:/app/uploads
-        environment:
-            # Explicitly set upload directory inside the container
-            UPLOAD_DIR: /app/uploads
-            # The title shown in the web interface
-            DUMBDROP_TITLE: DumbDrop
-            # Maximum file size in MB
-            MAX_FILE_SIZE: 1024
-            # Optional PIN protection (leave empty to disable)
-            DUMBDROP_PIN: 123456
-            # Upload without clicking button
-            AUTO_UPLOAD: false
-            # The base URL for the application
-            # You must update this to the url you use to access your site
-            BASE_URL: http://localhost:3000
+  dumbdrop:
+    image: dumbwareio/dumbdrop:latest
+    ports:
+      - 3000:3000
+    volumes:
+      # Where your uploaded files will land
+      - ./uploads:/app/uploads
+    environment:
+      # Explicitly set upload directory inside the container
+      UPLOAD_DIR: /app/uploads
+      # The title shown in the web interface
+      DUMBDROP_TITLE: DumbDrop
+      # Maximum file size in MB
+      MAX_FILE_SIZE: 1024
+      # Optional PIN protection (leave empty to disable)
+      DUMBDROP_PIN: 123456
+      # Upload without clicking button
+      AUTO_UPLOAD: false
+      # The base URL for the application
+      # You must update this to the url you use to access your site
+      BASE_URL: http://localhost:3000
 ```
+
 Then run:
+
 ```bash
 docker compose up -d
 ```
+
 1. Go to http://localhost:3000
 2. Upload a File - It'll show up in ./uploads
 3. Rejoice in the glory of your dumb uploads
@@ -90,21 +98,22 @@ For local development setup, troubleshooting, and advanced usage, see the dedica
 
 ### Environment Variables
 
-| Variable               | Description                                                      | Default                                 | Required |
-|------------------------|------------------------------------------------------------------|-----------------------------------------|----------|
-| PORT                   | Server port                                                      | 3000                                    | No       |
-| BASE_URL               | Base URL for the application                                     | http://localhost:PORT                   | No       |
-| MAX_FILE_SIZE          | Maximum file size in MB                                          | 1024                                    | No       |
-| DUMBDROP_PIN           | PIN protection (4-10 digits)                                     | None                                    | No       |
-| DUMBDROP_TITLE         | Site title displayed in header                                   | DumbDrop                                | No       |
-| APPRISE_URL            | Apprise URL for notifications                                    | None                                    | No       |
-| APPRISE_MESSAGE        | Notification message template                                    | New file uploaded {filename} ({size}), Storage used {storage} | No |
-| APPRISE_SIZE_UNIT      | Size unit for notifications (B, KB, MB, GB, TB, or Auto)         | Auto                                    | No       |
-| AUTO_UPLOAD            | Enable automatic upload on file selection                        | false                                   | No       |
-| ALLOWED_EXTENSIONS     | Comma-separated list of allowed file extensions                  | None                                    | No       |
-| ALLOWED_IFRAME_ORIGINS | Comma-separated list of origins allowed to embed the app in an iframe | None                              | No       |
-| UPLOAD_DIR             | Directory for uploads (Docker/production; should be `/app/uploads` in container) | None (see LOCAL_UPLOAD_DIR fallback)    | No       |
-| LOCAL_UPLOAD_DIR       | Directory for uploads (local dev, fallback: './local_uploads')   | ./local_uploads                         | No       |
+| Variable                                                 | Description                                                                                                                           | Default                                                       | Required |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------- |
+| PORT                                                     | Server port                                                                                                                           | 3000                                                          | No       |
+| BASE_URL                                                 | Base URL for the application                                                                                                          | http://localhost:PORT                                         | No       |
+| MAX_FILE_SIZE                                            | Maximum file size in MB                                                                                                               | 1024                                                          | No       |
+| DUMBDROP_PIN                                             | PIN protection (4-10 digits)                                                                                                          | None                                                          | No       |
+| DUMBDROP_TITLE                                           | Site title displayed in header                                                                                                        | DumbDrop                                                      | No       |
+| APPRISE_URL                                              | Apprise URL for notifications                                                                                                         | None                                                          | No       |
+| APPRISE_MESSAGE                                          | Notification message template                                                                                                         | New file uploaded {filename} ({size}), Storage used {storage} | No       |
+| APPRISE_SIZE_UNIT                                        | Size unit for notifications (B, KB, MB, GB, TB, or Auto)                                                                              | Auto                                                          | No       |
+| AUTO_UPLOAD                                              | Enable automatic upload on file selection                                                                                             | false                                                         | No       |
+| ALLOWED_EXTENSIONS                                       | Comma-separated list of allowed file extensions                                                                                       | None                                                          | No       |
+| ALLOWED_IFRAME_ORIGINS (deprecated: see ALLOWED_ORIGINS) | Comma-separated list of origins allowed to embed the app in an iframe                                                                 | None                                                          | No       |
+| ALLOWED_ORIGINS                                          | You can restrict CORS to your BASE_URL or a comma-separated list of specified origins, which will automatically include your base_url | '\*'                                                          | No       |
+| UPLOAD_DIR                                               | Directory for uploads (Docker/production; should be `/app/uploads` in container)                                                      | None (see LOCAL_UPLOAD_DIR fallback)                          | No       |
+| LOCAL_UPLOAD_DIR                                         | Directory for uploads (local dev, fallback: './local_uploads')                                                                        | ./local_uploads                                               | No       |
 
 - **UPLOAD_DIR** is used in Docker/production. If not set, LOCAL_UPLOAD_DIR is used for local development. If neither is set, the default is `./local_uploads`.
 - **Docker Note:** The Dockerfile now only creates the `uploads` directory inside the container. The host's `./local_uploads` is mounted to `/app/uploads` and should be managed on the host system.
@@ -114,50 +123,72 @@ For local development setup, troubleshooting, and advanced usage, see the dedica
 See `.env.example` for a template and more details.
 
 <details>
-<summary>ALLOWED_IFRAME_ORIGINS</summary>
+<summary>ALLOWED_IFRAME_ORIGINS (DEPRECATED: see ALLOWED_ORIGINS)</summary>
 
-To allow this app to be embedded in an iframe on specific origins (such as Organizr), set the `ALLOWED_IFRAME_ORIGINS` environment variable. For example:
+~~To allow this app to be embedded in an iframe on specific origins (such as Organizr), set the `ALLOWED_IFRAME_ORIGINS` environment variable. For example:~~
 
 ```env
 ALLOWED_IFRAME_ORIGINS=https://organizr.example.com,https://myportal.com
 ```
 
-- If not set, the app will only allow itself to be embedded in an iframe on the same origin (default security).
-- If set, the app will allow embedding in iframes on the specified origins and itself.
-- **Security Note:** Only add trusted origins. Allowing arbitrary origins can expose your app to clickjacking and other attacks.
+- ~~If not set, the app will only allow itself to be embedded in an iframe on the same origin (default security).~~
+- ~~If set, the app will allow embedding in iframes on the specified origins and itself.~~
+- ~~**Security Note:** Only add trusted origins. Allowing arbitrary origins can expose your app to clickjacking and other attacks.~~
 </details>
+
+<details>
+<summary>ALLOWED_ORIGINS</summary>
+
+By default `ALLOWED_ORIGINS` is set to '\*'
+
+```env
+ALLOWED_ORIGINS=https://organizr.example.com,https://myportal.com,http://internalip:port
+```
+
+- If you would like to restrict CORS to your BASE_URL, you can set it like this: `ALLOWED_ORIGINS=http://localhost:3000`
+- If you would like to allow multiple origins, you can set it like this: `ALLOWED_ORIGINS=http://internalip:port,https://subdomain.domain.tld`
+  - This will automatically include your BASE_URL in the list of allowed origins.
+  </details>
 
 <details>
 <summary>File Extension Filtering</summary>
 
 To restrict which file types can be uploaded, set the `ALLOWED_EXTENSIONS` environment variable. For example:
+
 ```env
 ALLOWED_EXTENSIONS=.jpg,.jpeg,.png,.pdf,.doc,.docx,.txt
 ```
+
 If not set, all file extensions will be allowed.
+
 </details>
 
 <details>
 <summary>Notification Setup</summary>
 
 #### Message Templates
+
 The notification message supports the following placeholders:
+
 - `{filename}`: Name of the uploaded file
 - `{size}`: Size of the file (formatted according to APPRISE_SIZE_UNIT)
 - `{storage}`: Total size of all files in upload directory
 
 Example message template:
+
 ```env
 APPRISE_MESSAGE: New file uploaded {filename} ({size}), Storage used {storage}
 ```
 
 Size formatting examples:
+
 - Auto (default): Chooses nearest unit (e.g., "1.44MB", "256KB")
 - Fixed unit: Set APPRISE_SIZE_UNIT to B, KB, MB, GB, or TB
 
 Both {size} and {storage} use the same formatting rules based on APPRISE_SIZE_UNIT.
 
 #### Notification Support
+
 - Integration with [Apprise](https://github.com/caronc/apprise?tab=readme-ov-file#supported-notifications) for flexible notifications
 - Support for all Apprise notification services
 - Customizable notification messages with filename templating
@@ -167,6 +198,7 @@ Both {size} and {storage} use the same formatting rules based on APPRISE_SIZE_UN
 ## Security
 
 ### Features
+
 - Variable-length PIN support (4-10 digits)
 - Constant-time PIN comparison
 - Input sanitization
@@ -178,6 +210,7 @@ Both {size} and {storage} use the same formatting rules based on APPRISE_SIZE_UN
 ## Technical Details
 
 ### Stack
+
 - **Backend**: Node.js (>=20.0.0) with Express
 - **Frontend**: Vanilla JavaScript (ES6+)
 - **Container**: Docker with multi-stage builds
@@ -186,6 +219,7 @@ Both {size} and {storage} use the same formatting rules based on APPRISE_SIZE_UN
 - **Notifications**: Apprise integration
 
 ### Dependencies
+
 - express: Web framework
 - multer: File upload handling
 - apprise: Notification system
@@ -210,8 +244,10 @@ See [Local Development (Recommended Quick Start)](LOCAL_DEVELOPMENT.md) for loca
 </a>
 
 ---
+
 Made with ❤️ by [DumbWare.io](https://dumbware.io)
 
 ## Future Features
+
 - Camera Upload for Mobile
-> Got an idea? [Open an issue](https://github.com/dumbwareio/dumbdrop/issues) or [submit a PR](https://github.com/dumbwareio/dumbdrop/pulls)
+  > Got an idea? [Open an issue](https://github.com/dumbwareio/dumbdrop/issues) or [submit a PR](https://github.com/dumbwareio/dumbdrop/pulls)

@@ -79,7 +79,7 @@ function determineUploadDirectory() {
  * Returns true if NODE_ENV is not 'production' and UPLOAD_DIR is not set (i.e., not Docker)
  */
 function isLocalDevelopment() {
-  return process.env.NODE_ENV !== 'production' && !process.env.UPLOAD_DIR;
+  return process.env.NODE_ENV !== 'production';
 }
 
 /**
@@ -119,10 +119,10 @@ const config = {
    */
   port: process.env.PORT,
   /**
-   * Node environment (default: 'development')
+   * Node environment (default: 'production')
    * Set via NODE_ENV in .env
    */
-  nodeEnv: process.env.NODE_ENV || 'production',
+  nodeEnv: process.env.NODE_ENV,
   /**
    * Base URL for the app (default: http://localhost:${PORT})
    * Set via BASE_URL in .env

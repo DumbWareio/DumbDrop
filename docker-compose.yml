@@ -16,8 +16,8 @@ services:
             BASE_URL: http://localhost:3000  # The base URL for the application, You must update this to the url you use to access your site
             
             # Comma-separated list of allowed origins for CORS
-            # (default: '*' if empty, add your base_url if you want to restrict only to base_url)
-            # When adding multiple origins, base_url will be included by default
+            # (default: '*' if empty, replace with your base_url if you want to restrict only to base_url)
+            # When adding multiple origins, base_url will be included by default and does not need to the list
             # ALLOWED_ORIGINS: http://internalip:port,https://subdomain.example.com
 
             # Additional available environment variables (commented out with defaults)
