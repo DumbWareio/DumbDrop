@@ -126,16 +126,30 @@ const config = {
   /**
    * Allowed CORS origins (comma-separated, optional)
    * Set via ALLOWED_ORIGINS in .env
-   * Defaults to localhost and 127.0.0.1 variants if not specified
+   * Defaults to localhost variants and BASE_URL origin if not specified
    */
-  allowedOrigins: process.env.ALLOWED_ORIGINS ? 
-    process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean) : 
-    [
+  allowedOrigins: (() => {
+    const defaultOrigins = [
       'http://localhost:3000',
       'http://127.0.0.1:3000',
       'http://localhost:5050',
       'http://127.0.0.1:5050'
-    ],
+    ];
+
+    // Extract origin from BASE_URL and add to defaults
+    try {
+      const baseUrlOrigin = new URL(process.env.BASE_URL || DEFAULT_BASE_URL).origin;
+      if (!defaultOrigins.includes(baseUrlOrigin)) {
+        defaultOrigins.push(baseUrlOrigin);
+      }
+    } catch (err) {
+      logConfig(`Failed to parse BASE_URL for CORS origin: ${err.message}`, 'warning');
+    }
+
+    return process.env.ALLOWED_ORIGINS ? 
+      process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean) : 
+      defaultOrigins;
+  })(),
 
   allowedIframeOrigins: process.env.ALLOWED_IFRAME_ORIGINS
     ? process.env.ALLOWED_IFRAME_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
