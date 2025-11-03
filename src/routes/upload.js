@@ -12,7 +12,7 @@ const fs = require('fs').promises; // Use promise-based fs
 const fsSync = require('fs'); // For sync checks like existsSync
 const { config } = require('../config');
 const logger = require('../utils/logger');
-const { getUniqueFilePath, getUniqueFolderPath, sanitizeFilename, sanitizePathPreserveDirs, isValidBatchId } = require('../utils/fileUtils');
+const { getUniqueFilePath, getUniqueFolderPath, sanitizeFilename, sanitizePathPreserveDirs, sanitizeFilenameSafe, sanitizePathPreserveDirsSafe, isValidBatchId } = require('../utils/fileUtils');
 const { sendNotification } = require('../services/notifications');
 const { isDemoMode } = require('../utils/demoMode');
 
@@ -126,12 +126,19 @@ router.post('/init', async (req, res) => {
   // DEMO MODE CHECK - Bypass persistence if in demo mode
   if (isDemoMode()) {
     const { filename, fileSize } = req.body;
+    const sanitizedDemoFilename = sanitizePathPreserveDirsSafe(filename);
     const uploadId = 'demo-' + crypto.randomBytes(16).toString('hex');
-    logger.info(`[DEMO] Initialized upload for ${filename} (${fileSize} bytes) with ID ${uploadId}`);
+    
+    // Log if the filename was changed during sanitization
+    if (filename !== sanitizedDemoFilename) {
+      logger.info(`[DEMO] Filename sanitized: "${filename}" -> "${sanitizedDemoFilename}"`);
+    }
+    
+    logger.info(`[DEMO] Initialized upload for ${sanitizedDemoFilename} (${fileSize} bytes) with ID ${uploadId}`);
     // Simulate zero-byte completion for demo
     if (Number(fileSize) === 0) {
-      logger.success(`[DEMO] Completed zero-byte file upload: ${filename}`);
-      sendNotification(filename, 0, config); // Still send notification if configured
+      logger.success(`[DEMO] Completed zero-byte file upload: ${sanitizedDemoFilename}`);
+      sendNotification(sanitizedDemoFilename, 0, config); // Still send notification if configured
     }
     return res.json({ uploadId });
   }
@@ -153,12 +160,18 @@ router.post('/init', async (req, res) => {
 
   try {
     // --- Path handling and Sanitization ---
-    const sanitizedFilename = sanitizePathPreserveDirs(filename);
+    const sanitizedFilename = sanitizePathPreserveDirsSafe(filename);
     const safeFilename = path.normalize(sanitizedFilename)
       .replace(/^(\.\.(\/|\\|$))+/, '')
       .replace(/\\/g, '/')
       .replace(/^\/+/, '');
-    logger.info(`Upload init request for: ${safeFilename}`);
+    
+    // Log if the filename was changed during sanitization
+    if (filename !== safeFilename) {
+      logger.info(`Upload filename sanitized: "${filename}" -> "${safeFilename}"`);
+    } else {
+      logger.info(`Upload init request for: ${safeFilename}`);
+    }
 
     // --- Extension Check ---
     if (config.allowedExtensions) {

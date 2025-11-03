@@ -48,6 +48,33 @@
         <div id="uploadProgress"></div>
         <div id="fileList" class="file-list"></div>
         <button id="uploadButton" class="upload-button" style="display: none;">Upload Files</button>
+        
+        <!-- File listing section (controlled by SHOW_FILE_LIST environment variable) -->
+        <div id="uploadedFilesList" class="uploaded-files-section" style="display: none;">
+            <div class="uploaded-files-header">
+                <h2>Uploaded Files</h2>
+                <div class="uploaded-files-stats">
+                    <span id="totalFiles">0 files</span> • 
+                    <span id="totalSize">0 B</span>
+                    <button id="refreshFilesBtn" class="refresh-btn">🔄 Refresh</button>
+                </div>
+            </div>
+            <div id="uploadedFilesContent" class="uploaded-files-content">
+                <div class="loading-message">Loading files...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rename Modal -->
+    <div id="renameModal" class="rename-modal">
+        <div class="rename-modal-content">
+            <h3>Rename Item</h3>
+            <input type="text" id="renameInput" class="rename-input" placeholder="Enter new name...">
+            <div class="rename-actions">
+                <button class="modal-btn modal-btn-cancel" onclick="fileListManager.cancelRename()">Cancel</button>
+                <button class="modal-btn modal-btn-confirm" onclick="fileListManager.confirmRename()">Rename</button>
+            </div>
+        </div>
     </div>
 
     <script defer>
@@ -72,6 +99,9 @@
 
         const AUTO_UPLOAD_STR = '{{AUTO_UPLOAD}}';
         const AUTO_UPLOAD = ['true', '1', 'yes'].includes(AUTO_UPLOAD_STR.toLowerCase());
+
+        const SHOW_FILE_LIST_STR = '{{SHOW_FILE_LIST}}';
+        const SHOW_FILE_LIST = ['true', '1', 'yes'].includes(SHOW_FILE_LIST_STR.toLowerCase());
 
         // Utility function to generate a unique batch ID
         function generateBatchId() {
@@ -897,6 +927,215 @@
             50% { opacity: 1; }
             100% { opacity: 0.6; }
         }
+        
+        /* Uploaded files listing styles */
+        .uploaded-files-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: var(--container-bg);
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+        }
+        .uploaded-files-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .uploaded-files-header h2 {
+            margin: 0;
+            color: var(--text-color);
+            font-size: 1.5em;
+        }
+        .uploaded-files-stats {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-color-secondary);
+            font-size: 0.9em;
+        }
+        .refresh-btn {
+            padding: 5px 10px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: background 0.3s;
+        }
+        .refresh-btn:hover {
+            background: var(--primary-hover);
+        }
+        .uploaded-files-content {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .uploaded-file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            margin: 5px 0;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+        .uploaded-file-item:hover {
+            background: var(--hover-bg, rgba(0, 0, 0, 0.05));
+        }
+        [data-theme="dark"] .uploaded-file-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .uploaded-file-info {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-width: 0;
+        }
+        .uploaded-file-name {
+            font-weight: 500;
+            color: var(--text-color);
+            margin-bottom: 2px;
+            word-break: break-all;
+        }
+        .uploaded-file-details {
+            font-size: 0.85em;
+            color: var(--text-color-secondary);
+        }
+        .uploaded-file-actions {
+            display: flex;
+            gap: 5px;
+            margin-left: 10px;
+        }
+        .action-btn {
+            padding: 5px 8px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.8em;
+            transition: all 0.3s;
+            min-width: 60px;
+        }
+        .download-btn {
+            background: var(--success-color);
+            color: white;
+        }
+        .download-btn:hover {
+            background: var(--success-hover, #27ae60);
+        }
+        .rename-btn {
+            background: var(--warning-color, #f39c12);
+            color: white;
+        }
+        .rename-btn:hover {
+            background: var(--warning-hover, #e67e22);
+        }
+        .delete-btn {
+            background: var(--danger-color);
+            color: white;
+        }
+        .delete-btn:hover {
+            background: var(--danger-hover, #c0392b);
+        }
+        .directory-item {
+            border-left: 3px solid var(--primary-color);
+        }
+        .directory-children {
+            margin-left: 20px;
+            border-left: 1px solid var(--border-color);
+            padding-left: 10px;
+            margin-top: 5px;
+        }
+        .loading-message, .error-message {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-color-secondary);
+        }
+        .error-message {
+            color: var(--danger-color);
+        }
+        .empty-message {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-color-secondary);
+            font-style: italic;
+        }
+        
+        /* Rename modal styles */
+        .rename-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .rename-modal.show {
+            display: flex;
+        }
+        .rename-modal-content {
+            background: var(--container-bg);
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            max-width: 500px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .rename-modal h3 {
+            margin: 0 0 15px 0;
+            color: var(--text-color);
+        }
+        .rename-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            background: var(--bg-color);
+            color: var(--text-color);
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        .rename-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+        .rename-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        .modal-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        .modal-btn-cancel {
+            background: var(--secondary-color, #6c757d);
+            color: white;
+        }
+        .modal-btn-cancel:hover {
+            background: var(--secondary-hover, #5a6268);
+        }
+        .modal-btn-confirm {
+            background: var(--primary-color);
+            color: white;
+        }
+        .modal-btn-confirm:hover {
+            background: var(--primary-hover);
+        }
         `;
         document.head.appendChild(style);
 
@@ -933,6 +1172,11 @@
                 folderInput.value = '';
                 files = [];
                 updateFileList();
+                
+                // Refresh the uploaded files list if it's enabled
+                if (SHOW_FILE_LIST && fileListManager) {
+                    fileListManager.loadFiles();
+                }
             } catch (error) {
                 console.error('Upload failed:', error);
                 Toastify({
@@ -948,6 +1192,333 @@
                 uploadButton.disabled = false;
             }
         }
+
+        // File listing functionality
+        class FileListManager {
+            constructor() {
+                this.uploadedFilesList = document.getElementById('uploadedFilesList');
+                this.uploadedFilesContent = document.getElementById('uploadedFilesContent');
+                this.totalFilesSpan = document.getElementById('totalFiles');
+                this.totalSizeSpan = document.getElementById('totalSize');
+                this.refreshBtn = document.getElementById('refreshFilesBtn');
+                this.renameModal = document.getElementById('renameModal');
+                this.renameInput = document.getElementById('renameInput');
+                this.currentRenameData = null;
+                
+                if (SHOW_FILE_LIST) {
+                    this.init();
+                }
+            }
+            
+            init() {
+                this.uploadedFilesList.style.display = 'block';
+                this.refreshBtn.addEventListener('click', () => this.loadFiles());
+                this.setupModalEventListeners();
+                this.loadFiles();
+            }
+            
+            setupModalEventListeners() {
+                // Ensure modal closes when clicking outside
+                this.renameModal.addEventListener('click', (e) => {
+                    if (e.target === this.renameModal) {
+                        this.cancelRename();
+                    }
+                });
+                
+                // Handle keyboard shortcuts
+                document.addEventListener('keydown', (e) => {
+                    if (this.renameModal.classList.contains('show')) {
+                        if (e.key === 'Escape') {
+                            this.cancelRename();
+                        }
+                    }
+                });
+            }
+            
+            async loadFiles() {
+                try {
+                    this.showLoading();
+                    const response = await fetch('/api/files');
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    this.displayFiles(data);
+                } catch (error) {
+                    console.error('Failed to load files:', error);
+                    this.showError('Failed to load files: ' + error.message);
+                }
+            }
+            
+            showLoading() {
+                this.uploadedFilesContent.innerHTML = '<div class="loading-message">Loading files...</div>';
+            }
+            
+            showError(message) {
+                this.uploadedFilesContent.innerHTML = `<div class="error-message">${escapeHtml(message)}</div>`;
+            }
+            
+            displayFiles(data) {
+                this.totalFilesSpan.textContent = `${data.totalFiles} file${data.totalFiles !== 1 ? 's' : ''}`;
+                this.totalSizeSpan.textContent = data.formattedTotalSize || formatFileSize(data.totalSize);
+                
+                if (data.items.length === 0) {
+                    this.uploadedFilesContent.innerHTML = '<div class="empty-message">No files uploaded yet</div>';
+                    return;
+                }
+                
+                this.uploadedFilesContent.innerHTML = '';
+                this.renderItems(data.items, this.uploadedFilesContent);
+            }
+            
+            renderItems(items, container, level = 0) {
+                items.forEach(item => {
+                    const itemElement = this.createItemElement(item, level);
+                    container.appendChild(itemElement);
+                    
+                    if (item.type === 'directory' && item.children && item.children.length > 0) {
+                        const childrenContainer = document.createElement('div');
+                        childrenContainer.className = 'directory-children';
+                        this.renderItems(item.children, childrenContainer, level + 1);
+                        container.appendChild(childrenContainer);
+                    }
+                });
+            }
+            
+            createItemElement(item, level) {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = `uploaded-file-item ${item.type === 'directory' ? 'directory-item' : ''}`;
+                
+                const icon = item.type === 'directory' ? '📁' : '📄';
+                const name = item.name;
+                const details = item.type === 'directory' 
+                    ? `${item.formattedSize} • ${this.countFilesInDirectory(item)} files`
+                    : `${item.formattedSize} • ${new Date(item.uploadDate).toLocaleDateString()}`;
+                
+                // Create info section
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'uploaded-file-info';
+                
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'uploaded-file-name';
+                nameDiv.textContent = `${icon} ${name}`;
+                
+                const detailsDiv = document.createElement('div');
+                detailsDiv.className = 'uploaded-file-details';
+                detailsDiv.textContent = details;
+                
+                infoDiv.appendChild(nameDiv);
+                infoDiv.appendChild(detailsDiv);
+                
+                // Create actions section
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'uploaded-file-actions';
+                
+                // Download button (only for files)
+                if (item.type === 'file') {
+                    const downloadBtn = document.createElement('button');
+                    downloadBtn.className = 'action-btn download-btn';
+                    downloadBtn.textContent = 'Download';
+                    downloadBtn.dataset.path = item.path;
+                    downloadBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.downloadFile(downloadBtn.dataset.path);
+                    });
+                    actionsDiv.appendChild(downloadBtn);
+                }
+                
+                // Rename button
+                const renameBtn = document.createElement('button');
+                renameBtn.className = 'action-btn rename-btn';
+                renameBtn.textContent = 'Rename';
+                renameBtn.dataset.path = item.path;
+                renameBtn.dataset.type = item.type;
+                renameBtn.dataset.name = item.name;
+                renameBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.renameItem(renameBtn.dataset.path, renameBtn.dataset.type, renameBtn.dataset.name);
+                });
+                actionsDiv.appendChild(renameBtn);
+                
+                // Delete button
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'action-btn delete-btn';
+                deleteBtn.textContent = 'Delete';
+                deleteBtn.dataset.path = item.path;
+                deleteBtn.dataset.type = item.type;
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.deleteItem(deleteBtn.dataset.path, deleteBtn.dataset.type);
+                });
+                actionsDiv.appendChild(deleteBtn);
+                
+                // Assemble the item
+                itemDiv.appendChild(infoDiv);
+                itemDiv.appendChild(actionsDiv);
+                
+                return itemDiv;
+            }
+            
+            countFilesInDirectory(dir) {
+                if (!dir.children) return 0;
+                return dir.children.reduce((count, child) => {
+                    return count + (child.type === 'file' ? 1 : this.countFilesInDirectory(child));
+                }, 0);
+            }
+            
+            async downloadFile(filePath) {
+                try {
+                    // Encode each part of the path separately to handle subdirectories
+                    const encodedPath = filePath.split('/').map(part => encodeURIComponent(part)).join('/');
+                    const url = `/api/files/download/${encodedPath}`;
+                    window.open(url, '_blank');
+                } catch (error) {
+                    console.error('Download failed:', error);
+                    Toastify({
+                        text: `Download failed: ${error.message}`,
+                        duration: 3000,
+                        gravity: "bottom",
+                        position: "right",
+                        style: { background: "#f44336" }
+                    }).showToast();
+                }
+            }
+            
+            async deleteItem(itemPath, itemType) {
+                const itemName = itemPath.split('/').pop();
+                const confirmMessage = itemType === 'directory' 
+                    ? `Are you sure you want to delete the folder "${itemName}" and all its contents?`
+                    : `Are you sure you want to delete the file "${itemName}"?`;
+                
+                if (!confirm(confirmMessage)) {
+                    return;
+                }
+                
+                try {
+                    // Encode each part of the path separately to handle subdirectories
+                    const encodedPath = itemPath.split('/').map(part => encodeURIComponent(part)).join('/');
+                    const response = await fetch(`/api/files/${encodedPath}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.error || 'Delete failed');
+                    }
+                    
+                    Toastify({
+                        text: `${itemType === 'directory' ? 'Folder' : 'File'} deleted successfully`,
+                        duration: 3000,
+                        gravity: "bottom",
+                        position: "right",
+                        style: { background: "#4CAF50" }
+                    }).showToast();
+                    
+                    // Reload the file list
+                    this.loadFiles();
+                } catch (error) {
+                    console.error('Delete failed:', error);
+                    Toastify({
+                        text: `Delete failed: ${error.message}`,
+                        duration: 3000,
+                        gravity: "bottom",
+                        position: "right",
+                        style: { background: "#f44336" }
+                    }).showToast();
+                }
+            }
+            
+            async renameItem(itemPath, itemType, currentName) {
+                this.currentRenameData = { itemPath, itemType, currentName };
+                this.renameInput.value = currentName;
+                this.renameModal.classList.add('show');
+                this.renameInput.focus();
+                this.renameInput.select();
+                
+                // Add Enter key support for this specific rename session
+                const handleKeydown = (e) => {
+                    if (e.key === 'Enter') {
+                        this.confirmRename();
+                    }
+                };
+                this.renameInput.addEventListener('keydown', handleKeydown);
+                
+                // Store the handler so we can remove it later
+                this.currentKeydownHandler = handleKeydown;
+            }
+            
+            cancelRename() {
+                this.renameModal.classList.remove('show');
+                this.currentRenameData = null;
+                
+                // Clean up event listener
+                if (this.currentKeydownHandler) {
+                    this.renameInput.removeEventListener('keydown', this.currentKeydownHandler);
+                    this.currentKeydownHandler = null;
+                }
+            }
+            
+            async confirmRename() {
+                if (!this.currentRenameData) return;
+                
+                const newName = this.renameInput.value.trim();
+                if (!newName) {
+                    alert('Please enter a valid name');
+                    return;
+                }
+                
+                if (newName === this.currentRenameData.currentName) {
+                    this.cancelRename();
+                    return;
+                }
+                
+                try {
+                    // Encode each part of the path separately to handle subdirectories
+                    const encodedPath = this.currentRenameData.itemPath.split('/').map(part => encodeURIComponent(part)).join('/');
+                    const response = await fetch(`/api/files/rename/${encodedPath}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ newName })
+                    });
+                    
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.error || 'Rename failed');
+                    }
+                    
+                    const result = await response.json();
+                    
+                    Toastify({
+                        text: result.message,
+                        duration: 3000,
+                        gravity: "bottom",
+                        position: "right",
+                        style: { background: "#4CAF50" }
+                    }).showToast();
+                    
+                    // Close modal and reload file list
+                    this.cancelRename();
+                    this.loadFiles();
+                    
+                } catch (error) {
+                    console.error('Rename failed:', error);
+                    Toastify({
+                        text: `Rename failed: ${error.message}`,
+                        duration: 3000,
+                        gravity: "bottom",
+                        position: "right",
+                        style: { background: "#f44336" }
+                    }).showToast();
+                }
+            }
+        }
+        
+        // Initialize file list manager
+        const fileListManager = new FileListManager();
 
         // Theme management
         function setTheme(theme) {

@@ -147,11 +147,124 @@ async function getUniqueFolderPath(folderPath) {
   return finalPath;
 }
 
+/**
+ * Comprehensive filename sanitization for safe file storage
+ * Removes spaces, special characters, and normalizes to ASCII-safe characters
+ * @param {string} fileName - Original filename
+ * @returns {string} Sanitized filename safe for all operating systems
+ */
+function sanitizeFilenameSafe(fileName) {
+  if (!fileName || typeof fileName !== 'string') {
+    return 'unnamed_file';
+  }
+
+  // Get the file extension first (preserve it)
+  const ext = path.extname(fileName);
+  let baseName = path.basename(fileName, ext);
+
+  // If no base name after removing extension, use a default
+  if (!baseName || baseName.trim() === '') {
+    baseName = 'unnamed_file';
+  }
+
+  // Step 1: Normalize Unicode characters to ASCII equivalents
+  baseName = baseName
+    .normalize('NFD') // Decompose Unicode characters
+    .replace(/[\u0300-\u036f]/g, '') // Remove diacritical marks
+    .replace(/[^\x00-\x7F]/g, ''); // Remove non-ASCII characters
+
+  // Step 2: Replace spaces and common separators with underscores
+  baseName = baseName
+    .replace(/\s+/g, '_') // Replace all whitespace with underscores
+    .replace(/[+\-\s]+/g, '_'); // Replace + and - with underscores
+
+  // Step 3: Remove or replace problematic characters
+  baseName = baseName
+    .replace(/[<>:"/\\|?*]/g, '') // Remove filesystem reserved characters
+    .replace(/[`"'$|;&<>(){}[\]]/g, '') // Remove shell/command problematic chars
+    .replace(/[~#%&*{}\\:<>?\/+|"']/g, '') // Remove additional problematic chars
+    .replace(/[^\w\-_.]/g, '') // Keep only word chars, hyphens, underscores, dots
+    .replace(/_{2,}/g, '_') // Replace multiple underscores with single
+    .replace(/^[._-]+/, '') // Remove leading dots, underscores, hyphens
+    .replace(/[._-]+$/, ''); // Remove trailing dots, underscores, hyphens
+
+  // Step 4: Ensure the filename isn't empty and isn't reserved
+  if (!baseName || baseName.length === 0) {
+    baseName = 'file';
+  }
+
+  // Step 5: Check for Windows reserved names
+  const reservedNames = [
+    'CON', 'PRN', 'AUX', 'NUL',
+    'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
+    'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9'
+  ];
+  
+  if (reservedNames.includes(baseName.toUpperCase())) {
+    baseName = baseName + '_file';
+  }
+
+  // Step 6: Limit length (keep reasonable length, reserve space for extension)
+  const maxLength = 200; // Leave room for path length limits
+  if (baseName.length > maxLength) {
+    baseName = baseName.substring(0, maxLength);
+  }
+
+  // Step 7: Clean up the extension too
+  let cleanExt = ext;
+  if (cleanExt) {
+    cleanExt = cleanExt
+      .replace(/[^a-zA-Z0-9.]/g, '') // Only allow alphanumeric and dots in extension
+      .toLowerCase(); // Normalize to lowercase
+    
+    // Ensure extension starts with a dot
+    if (cleanExt && !cleanExt.startsWith('.')) {
+      cleanExt = '.' + cleanExt;
+    }
+  }
+
+  const finalName = baseName + cleanExt;
+  
+  // Final safety check - if somehow we end up with an empty name
+  if (!finalName || finalName === cleanExt) {
+    return 'file' + (cleanExt || '.txt');
+  }
+
+  return finalName;
+}
+
+/**
+ * Sanitize a file path while preserving directory structure
+ * Each path component is individually sanitized
+ * @param {string} filePath - Original file path
+ * @returns {string} Sanitized file path
+ */
+function sanitizePathPreserveDirsSafe(filePath) {
+  if (!filePath || typeof filePath !== 'string') {
+    return 'unnamed_file.txt';
+  }
+
+  // Split on forward slashes, sanitize each part, and rejoin
+  return filePath
+    .split('/')
+    .filter(part => part.length > 0 && part !== '.' && part !== '..') // Remove empty parts and path navigation tokens
+    .map(part => sanitizeFilenameSafe(part))
+    .join('/');
+}
+
+/**
+ * Legacy filename sanitization (kept for compatibility)
+ * @deprecated Use sanitizeFilenameSafe instead
+ */
 function sanitizeFilename(fileName) {
   const sanitized = fileName.replace(/[<>:"/\\|?*]+/g, '').replace(/["`$|;&<>]/g, '');
   return sanitized;
 }
 
+/**
+ * Legacy path sanitization (kept for compatibility)
+ * @deprecated Use sanitizePathPreserveDirsSafe instead
+ */
 function sanitizePathPreserveDirs(filePath) {
   // Split on forward slashes, sanitize each part, and rejoin
   return filePath
@@ -178,5 +291,7 @@ module.exports = {
   getUniqueFolderPath,
   sanitizeFilename,
   sanitizePathPreserveDirs,
+  sanitizeFilenameSafe,
+  sanitizePathPreserveDirsSafe,
   isValidBatchId
 }; 

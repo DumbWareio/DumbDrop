@@ -16,6 +16,7 @@ const { version } = require('../../package.json'); // Get version from package.j
  * LOCAL_UPLOAD_DIR    - Directory for uploads (local dev, fallback: './local_uploads')
  * MAX_FILE_SIZE       - Max upload size in MB (default: 1024)
  * AUTO_UPLOAD         - Enable auto-upload (true/false, default: false)
+ * SHOW_FILE_LIST      - Enable file listing in frontend (true/false, default: false)
  * DUMBDROP_PIN        - Security PIN for uploads (required for protected endpoints)
  * DUMBDROP_TITLE      - Site title (default: 'DumbDrop')
  * APPRISE_URL         - Apprise notification URL (optional)
@@ -154,6 +155,11 @@ const config = {
    * Set via AUTO_UPLOAD in .env
    */
   autoUpload: process.env.AUTO_UPLOAD === 'true',
+  /**
+   * Enable file listing in frontend (true/false, default: false)
+   * Set via SHOW_FILE_LIST in .env
+   */
+  showFileList: process.env.SHOW_FILE_LIST === 'true',
   
   // =====================
   // =====================

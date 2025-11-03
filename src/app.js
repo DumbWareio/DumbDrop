@@ -90,6 +90,7 @@ app.get('/', (req, res) => {
   html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
   html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
   html = html.replace('{{MAX_RETRIES}}', config.clientMaxRetries.toString());
+  html = html.replace('{{SHOW_FILE_LIST}}', config.showFileList.toString());
   html = injectDemoBanner(html);
   res.send(html);
 });

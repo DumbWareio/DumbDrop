@@ -93,6 +93,7 @@ For local development setup, troubleshooting, and advanced usage, see the dedica
 - 🛡️ Built-in security features
 - 💾 Configurable file size limits
 - 🎯 File extension filtering
+- 📋 Optional file listing with download/delete functionality
 
 ## Configuration
 
@@ -109,6 +110,7 @@ For local development setup, troubleshooting, and advanced usage, see the dedica
 | APPRISE_MESSAGE                                          | Notification message template                                                                                                         | New file uploaded {filename} ({size}), Storage used {storage} | No       |
 | APPRISE_SIZE_UNIT                                        | Size unit for notifications (B, KB, MB, GB, TB, or Auto)                                                                              | Auto                                                          | No       |
 | AUTO_UPLOAD                                              | Enable automatic upload on file selection                                                                                             | false                                                         | No       |
+| SHOW_FILE_LIST                                           | Enable file listing with download and delete functionality                                                                            | false                                                         | No       |
 | ALLOWED_EXTENSIONS                                       | Comma-separated list of allowed file extensions                                                                                       | None                                                          | No       |
 | ALLOWED_IFRAME_ORIGINS (deprecated: see ALLOWED_ORIGINS) | Comma-separated list of origins allowed to embed the app in an iframe                                                                 | None                                                          | No       |
 | ALLOWED_ORIGINS                                          | You can restrict CORS to your BASE_URL or a comma-separated list of specified origins, which will automatically include your base_url | '\*'                                                          | No       |
@@ -164,6 +166,30 @@ ALLOWED_EXTENSIONS=.jpg,.jpeg,.png,.pdf,.doc,.docx,.txt
 ```
 
 If not set, all file extensions will be allowed.
+
+</details>
+
+<details>
+<summary>File Listing and Management</summary>
+
+To enable the file listing feature that shows uploaded files with download and delete functionality, set the `SHOW_FILE_LIST` environment variable:
+
+```env
+SHOW_FILE_LIST=true
+```
+
+When enabled, this feature provides:
+
+- **File Listing**: Displays all uploaded files and folders in a hierarchical structure
+- **Download**: Direct download links for individual files
+- **Delete**: Ability to delete files and entire folders (including all contents)
+- **Statistics**: Shows total number of files and total storage used
+- **Refresh**: Manual refresh button to update the file list
+- **Folder Support**: Properly displays folder structures with nested files
+
+**Security Note:** The file listing respects the same security measures as the upload functionality. If a PIN is configured, users must authenticate before accessing file management features.
+
+The file list automatically refreshes after successful uploads to keep the display current.
 
 </details>
 
