@@ -251,8 +251,10 @@ function validateConfig() {
       logger.warn('BASE_URL did not end with a trailing slash. Automatically appending "/".');
       config.baseUrl = config.baseUrl + '/';
     }
-  } catch {
-    errors.push('BASE_URL must be a valid URL');
+  } catch (err) {
+    const errorMsg = `BASE_URL must be a valid URL: ${err.message || err}`;
+    logger.error(errorMsg);
+    errors.push(errorMsg);
   }
   
   if (config.nodeEnv === 'production') {

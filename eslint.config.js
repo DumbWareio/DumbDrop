@@ -11,6 +11,7 @@ module.exports = [
       'dist/**',
       'build/**',
       '.metadata/**',
+      'test/**',
     ],
   },
   js.configs.recommended,
