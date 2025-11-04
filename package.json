@@ -8,6 +8,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
+    "test": "node --test test/**/*.test.js",
     "predev": "node -e \"const v=process.versions.node.split('.');if(v[0]<20) {console.error('Node.js >=20.0.0 required');process.exit(1)}\""
   },
   "keywords": [],
@@ -22,13 +23,13 @@
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
     "helmet": "^8.1.0",
-    "multer": "^1.4.5-lts.1",
+    "multer": "^2.0.0",
     "toastify-js": "^1.12.0"
   },
   "devDependencies": {
-    "eslint": "^8.56.0",
+    "eslint": "^9.0.0",
     "eslint-config-prettier": "^9.1.0",
-    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-n": "^17.0.0",
     "nodemon": "^3.1.9",
     "prettier": "^3.2.5"
   },

@@ -7,7 +7,6 @@
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
-const { config } = require('../config');
 
 /**
  * Format file size to human readable format
@@ -171,6 +170,7 @@ function sanitizeFilenameSafe(fileName) {
   baseName = baseName
     .normalize('NFD') // Decompose Unicode characters
     .replace(/[\u0300-\u036f]/g, '') // Remove diacritical marks
+    // eslint-disable-next-line no-control-regex
     .replace(/[^\x00-\x7F]/g, ''); // Remove non-ASCII characters
 
   // Step 2: Replace spaces and common separators with underscores
@@ -182,7 +182,7 @@ function sanitizeFilenameSafe(fileName) {
   baseName = baseName
     .replace(/[<>:"/\\|?*]/g, '') // Remove filesystem reserved characters
     .replace(/[`"'$|;&<>(){}[\]]/g, '') // Remove shell/command problematic chars
-    .replace(/[~#%&*{}\\:<>?\/+|"']/g, '') // Remove additional problematic chars
+    .replace(/[~#%&*{}\\:<>?/+|"']/g, '') // Remove additional problematic chars
     .replace(/[^\w\-_.]/g, '') // Keep only word chars, hyphens, underscores, dots
     .replace(/_{2,}/g, '_') // Replace multiple underscores with single
     .replace(/^[._-]+/, '') // Remove leading dots, underscores, hyphens

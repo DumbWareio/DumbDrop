@@ -163,7 +163,6 @@ async function cleanupIncompleteMetadataUploads() {
     for (const file of files) {
       if (file.endsWith('.meta')) {
         checkedCount++;
-        const uploadId = file.replace('.meta', '');
         const metaFilePath = path.join(METADATA_DIR, file);
         let metadata;
 
@@ -238,11 +237,15 @@ async function cleanupIncompleteMetadataUploads() {
 
 // Schedule the new cleanup function
 const METADATA_CLEANUP_INTERVAL = 15 * 60 * 1000; // e.g., every 15 minutes
-let metadataCleanupTimer = setInterval(cleanupIncompleteMetadataUploads, METADATA_CLEANUP_INTERVAL);
-metadataCleanupTimer.unref(); // Allow process to exit if this is the only timer
+let metadataCleanupTimer;
 
-process.on('SIGTERM', () => clearInterval(metadataCleanupTimer));
-process.on('SIGINT', () => clearInterval(metadataCleanupTimer));
+if (!process.env.DISABLE_BATCH_CLEANUP) {
+  metadataCleanupTimer = setInterval(cleanupIncompleteMetadataUploads, METADATA_CLEANUP_INTERVAL);
+  metadataCleanupTimer.unref(); // Allow process to exit if this is the only timer
+  
+  process.on('SIGTERM', () => clearInterval(metadataCleanupTimer));
+  process.on('SIGINT', () => clearInterval(metadataCleanupTimer));
+}
 
 /**
  * Recursively remove empty folders

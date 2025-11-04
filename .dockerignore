@@ -45,12 +45,14 @@ README.md
 CHANGELOG.md
 docs
 
-# Keep test files and configs for development builds
-# __tests__
-# jest.config.js
-# *.test.js
-# *.spec.js
-# .eslintrc*
-# .prettierrc*
+# Testing
+test/
+*.test.js
+*.spec.js
+coverage/
+
+# Development configs
 .editorconfig
 nodemon.json
+eslint.config.js
+.prettierrc

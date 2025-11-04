@@ -2,9 +2,7 @@ require('dotenv').config();
 
 const { validatePin } = require('../utils/security');
 const logger = require('../utils/logger');
-const fs = require('fs');
-const path = require('path');
-const { version } = require('../../package.json'); // Get version from package.json
+const fs = require('fs'); // Get version from package.json
 
 /**
  * Environment Variables Reference
@@ -32,7 +30,6 @@ const logConfig = (message, level = 'info') => {
 };
 
 // Default configurations
-const DEFAULT_CHUNK_SIZE = 1024 * 1024 * 100; // 100MB
 const DEFAULT_SITE_TITLE = 'DumbDrop';
 const NODE_ENV = process.env.NODE_ENV || 'production';
 const PORT = process.env.PORT || 3000;
@@ -254,7 +251,7 @@ function validateConfig() {
       logger.warn('BASE_URL did not end with a trailing slash. Automatically appending "/".');
       config.baseUrl = config.baseUrl + '/';
     }
-  } catch (err) {
+  } catch {
     errors.push('BASE_URL must be a valid URL');
   }
   

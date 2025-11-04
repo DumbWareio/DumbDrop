@@ -12,7 +12,7 @@ const fs = require('fs').promises; // Use promise-based fs
 const fsSync = require('fs'); // For sync checks like existsSync
 const { config } = require('../config');
 const logger = require('../utils/logger');
-const { getUniqueFilePath, getUniqueFolderPath, sanitizeFilename, sanitizePathPreserveDirs, sanitizeFilenameSafe, sanitizePathPreserveDirsSafe, isValidBatchId } = require('../utils/fileUtils');
+const { getUniqueFolderPath, sanitizePathPreserveDirsSafe, isValidBatchId } = require('../utils/fileUtils');
 const { sendNotification } = require('../services/notifications');
 const { isDemoMode } = require('../utils/demoMode');
 
@@ -54,15 +54,15 @@ async function writeUploadMetadata(uploadId, metadata) {
   }
   const metaFilePath = path.join(METADATA_DIR, `${uploadId}.meta`);
   metadata.lastActivity = Date.now(); // Update timestamp on every write
+  const tempMetaPath = `${metaFilePath}.${crypto.randomBytes(4).toString('hex')}.tmp`;
   try {
     // Write atomically if possible (write to temp then rename) for more safety
-    const tempMetaPath = `${metaFilePath}.${crypto.randomBytes(4).toString('hex')}.tmp`;
     await fs.writeFile(tempMetaPath, JSON.stringify(metadata, null, 2));
     await fs.rename(tempMetaPath, metaFilePath);
   } catch (err) {
     logger.error(`Error writing metadata for ${uploadId}: ${err.message}`);
     // Attempt to clean up temp file if rename failed
-    try { await fs.unlink(tempMetaPath); } catch (unlinkErr) {/* ignore */}
+    try { await fs.unlink(tempMetaPath); } catch {/* ignore */}
     throw err;
   }
 }
@@ -312,7 +312,7 @@ router.post('/chunk/:uploadId', express.raw({
         // await fs.access(potentialFinalPath);
         // return res.json({ bytesReceived: fileSizeGuess, progress: 100 });
         return res.status(404).json({ error: 'Upload session not found or already completed' });
-      } catch (finalCheckErr) {
+      } catch {
         return res.status(404).json({ error: 'Upload session not found or already completed' });
       }
     }
@@ -329,7 +329,7 @@ router.post('/chunk/:uploadId', express.raw({
       try {
         await fs.access(metadata.filePath); // Check if final file exists
         logger.info(`Upload ${uploadId} already finalized at ${metadata.filePath}.`);
-      } catch (accessErr) {
+      } catch {
         // Final file doesn't exist, attempt rename
         try {
           await fs.rename(metadata.partialFilePath, metadata.filePath);
