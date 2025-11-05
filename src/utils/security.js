@@ -56,7 +56,7 @@ function stopCleanupInterval() {
 }
 
 // Start cleanup interval unless disabled
-if (!process.env.DISABLE_SECURITY_CLEANUP) {
+if (!process.env.DISABLE_BATCH_CLEANUP && !process.env.DISABLE_SECURITY_CLEANUP) {
   startCleanupInterval();
 }
 

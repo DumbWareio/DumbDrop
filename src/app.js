@@ -127,7 +127,7 @@ app.use((req, res, next) => {
     html = html.replace(/{{BASE_URL}}/g, baseUrlWithSlash);
     html = injectDemoBanner(html);
     res.send(html);
-  } catch (err) {
+  } catch {
     next();
   }
 });
@@ -138,7 +138,9 @@ app.use(express.static('public'));
 app.use('/toastify', express.static(path.join(__dirname, '../node_modules/toastify-js/src')));
 
 // Error handling middleware
-app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+// Express requires all 4 parameters for error handling middleware
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
   logger.error(`Unhandled error: ${err.message}`);
   res.status(500).json({ 
     message: 'Internal server error', 

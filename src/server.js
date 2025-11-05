@@ -63,6 +63,7 @@ async function startServer() {
       // Start a shorter force shutdown timer
       const forceShutdownTimer = setTimeout(() => {
         logger.error('Force shutdown initiated');
+        // eslint-disable-next-line n/no-process-exit
         process.exit(1);
       }, 3000); // 3 seconds maximum for total shutdown
       
@@ -96,9 +97,11 @@ async function startServer() {
         // Clear the force shutdown timer since we completed gracefully
         clearTimeout(forceShutdownTimer);
         process.exitCode = 0;
+        // eslint-disable-next-line n/no-process-exit
         process.exit(0); // Ensure immediate exit
       } catch (error) {
         logger.error(`Error during shutdown: ${error.message}`);
+        // eslint-disable-next-line n/no-process-exit
         process.exit(1);
       }
     };

@@ -24,6 +24,7 @@ function createSafeContentDisposition(filename) {
   
   // Remove or replace characters that could cause issues
   // Remove control characters (0x00-0x1F, 0x7F) and quotes
+  // eslint-disable-next-line no-control-regex
   const sanitized = basename.replace(/[\u0000-\u001F\u007F"\\]/g, '_');
   
   // For ASCII-only filenames, use simple format

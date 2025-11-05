@@ -2,9 +2,7 @@ require('dotenv').config();
 
 const { validatePin } = require('../utils/security');
 const logger = require('../utils/logger');
-const fs = require('fs');
-const path = require('path');
-const { version } = require('../../package.json'); // Get version from package.json
+const fs = require('fs'); // Get version from package.json
 
 /**
  * Environment Variables Reference
@@ -32,7 +30,6 @@ const logConfig = (message, level = 'info') => {
 };
 
 // Default configurations
-const DEFAULT_CHUNK_SIZE = 1024 * 1024 * 100; // 100MB
 const DEFAULT_SITE_TITLE = 'DumbDrop';
 const NODE_ENV = process.env.NODE_ENV || 'production';
 const PORT = process.env.PORT || 3000;
@@ -255,7 +252,9 @@ function validateConfig() {
       config.baseUrl = config.baseUrl + '/';
     }
   } catch (err) {
-    errors.push('BASE_URL must be a valid URL');
+    const errorMsg = `BASE_URL must be a valid URL: ${err.message || err}`;
+    logger.error(errorMsg);
+    errors.push(errorMsg);
   }
   
   if (config.nodeEnv === 'production') {

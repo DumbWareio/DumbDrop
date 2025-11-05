@@ -6,7 +6,6 @@
 
 const multer = require('multer');
 const express = require('express');
-const router = express.Router();
 const logger = require('./logger');
 const { config } = require('../config');
 
@@ -42,9 +41,9 @@ const injectDemoBanner = (html) => {
 const demoFiles = new Map();
 const demoUploads = new Map();
 
-// Configure demo upload handling
+// Configure demo upload handling (storage configured for multer but not directly used)
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
+multer({ storage });
 
 // Create demo routes with exact path matching
 const demoRouter = express.Router();
