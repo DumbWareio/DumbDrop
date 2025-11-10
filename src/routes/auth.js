@@ -11,6 +11,7 @@ const {
   MAX_ATTEMPTS,
   LOCKOUT_DURATION 
 } = require('../utils/security');
+const { getClientIp } = require('../utils/ipExtractor');
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'production';
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
@@ -19,7 +20,7 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
  */
 router.post('/verify-pin', (req, res) => {
   const { pin } = req.body;
-  const ip = req.ip;
+  const ip = getClientIp(req);
   
   try {
     // If no PIN is set in config, always return success
@@ -113,7 +114,7 @@ router.get('/pin-required', (req, res) => {
 router.post('/logout', (req, res) => {
   try {
     res.clearCookie('DUMBDROP_PIN', { path: '/' });
-    logger.info(`Logout successful for IP: ${req.ip}`);
+    logger.info(`Logout successful for IP: ${getClientIp(req)}`);
     res.json({ success: true });
   } catch (err) {
     logger.error(`Logout error: ${err.message}`);

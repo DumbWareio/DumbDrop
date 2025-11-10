@@ -116,6 +116,8 @@ For local development setup, troubleshooting, and advanced usage, see the dedica
 | ALLOWED_ORIGINS                                          | You can restrict CORS to your BASE_URL or a comma-separated list of specified origins, which will automatically include your base_url | '\*'                                                          | No       |
 | UPLOAD_DIR                                               | Directory for uploads (Docker/production; should be `/app/uploads` in container)                                                      | None (see LOCAL_UPLOAD_DIR fallback)                          | No       |
 | LOCAL_UPLOAD_DIR                                         | Directory for uploads (local dev, fallback: './local_uploads')                                                                        | ./local_uploads                                               | No       |
+| TRUST_PROXY                                              | Trust proxy headers (X-Forwarded-For) - only enable if behind a reverse proxy                                                         | false                                                         | No       |
+| TRUSTED_PROXY_IPS                                        | Comma-separated list of trusted proxy IPs (optional, requires TRUST_PROXY=true)                                                       | None                                                          | No       |
 
 - **UPLOAD_DIR** is used in Docker/production. If not set, LOCAL_UPLOAD_DIR is used for local development. If neither is set, the default is `./local_uploads`.
 - **Docker Note:** The Dockerfile now only creates the `uploads` directory inside the container. The host's `./local_uploads` is mounted to `/app/uploads` and should be managed on the host system.
@@ -123,6 +125,76 @@ For local development setup, troubleshooting, and advanced usage, see the dedica
 - **BASE_URL** must end with a trailing slash. The app will fail to start if this is not the case.
 
 See `.env.example` for a template and more details.
+
+<details>
+<summary>Reverse Proxy Configuration (TRUST_PROXY)</summary>
+
+### Important Security Notice
+
+By default, DumbDrop **does not** trust proxy headers like `X-Forwarded-For`. This prevents attackers from spoofing IP addresses to bypass rate limiting and PIN brute-force protection.
+
+### When to Enable TRUST_PROXY
+
+Only enable `TRUST_PROXY=true` if you are deploying DumbDrop behind a **trusted reverse proxy** such as:
+- Nginx
+- Apache
+- Caddy
+- Traefik
+- Cloudflare
+- Other CDN or load balancer
+
+### Basic Configuration
+
+If behind a single reverse proxy:
+
+```env
+TRUST_PROXY=true
+```
+
+### Advanced Configuration (Recommended)
+
+For additional security, specify the exact IP addresses of your trusted proxies:
+
+```env
+TRUST_PROXY=true
+TRUSTED_PROXY_IPS=172.17.0.1,10.0.0.1
+```
+
+**Common proxy IPs:**
+- Docker default bridge: `172.17.0.1`
+- Docker Compose networks: Check with `docker network inspect <network_name>`
+- Nginx/Apache on same host: `127.0.0.1` or `::1`
+- External proxy: Use the actual IP of your proxy server
+
+### Security Warnings
+
+⚠️ **DO NOT enable `TRUST_PROXY` if:**
+- DumbDrop is directly accessible from the internet
+- You are unsure whether you have a reverse proxy
+- You cannot verify the proxy IP addresses
+
+⚠️ **Enabling proxy trust without a properly configured reverse proxy allows attackers to bypass security measures by spoofing headers.**
+
+### Examples for Common Setups
+
+**Nginx Reverse Proxy:**
+```env
+TRUST_PROXY=true
+TRUSTED_PROXY_IPS=172.17.0.1
+```
+
+**Cloudflare:**
+```env
+TRUST_PROXY=true
+# List Cloudflare IPs or use their published IP ranges
+```
+
+**Direct Access (No Proxy):**
+```env
+# TRUST_PROXY=false (default - no need to set)
+```
+
+</details>
 
 <details>
 <summary>ALLOWED_IFRAME_ORIGINS (DEPRECATED: see ALLOWED_ORIGINS)</summary>
@@ -232,10 +304,20 @@ Both {size} and {storage} use the same formatting rules based on APPRISE_SIZE_UN
 - Variable-length PIN support (4-10 digits)
 - Constant-time PIN comparison
 - Input sanitization
-- Rate limiting
+- Rate limiting with IP-based tracking
+- Protection against IP spoofing attacks
+- Configurable proxy trust for reverse proxy deployments
 - File extension filtering
 - No client-side PIN storage
 - Secure file handling
+
+### Security Best Practices
+
+1. **PIN Protection**: Always set a strong PIN when deploying publicly
+2. **Proxy Trust**: Only enable `TRUST_PROXY` when behind a verified reverse proxy
+3. **HTTPS**: Use HTTPS in production (handled by your reverse proxy)
+4. **File Extensions**: Restrict allowed file types using `ALLOWED_EXTENSIONS` if possible
+5. **Regular Updates**: Keep DumbDrop and its dependencies up to date
 
 ## Technical Details
 

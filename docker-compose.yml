@@ -32,3 +32,8 @@ services:
             # APPRISE_MESSAGE: "New file uploaded - {filename} ({size}), Storage used {storage}"  # Notification message template with placeholders: {filename}, {size}, {storage}
             # APPRISE_SIZE_UNIT: "Auto"  # Size unit for notifications (B, KB, MB, GB, TB, or Auto)
             # ALLOWED_EXTENSIONS: ".jpg,.jpeg,.png,.pdf,.doc,.docx,.txt"  # Comma-separated list of allowed file extensions (default: all allowed)
+            
+            # Reverse Proxy / Security Settings (IMPORTANT: Read documentation before enabling)
+            # TRUST_PROXY: false  # Set to 'true' ONLY if behind a trusted reverse proxy (Nginx, Caddy, Traefik, etc.)
+            # TRUSTED_PROXY_IPS: 172.17.0.1,10.0.0.1  # Optional: Comma-separated list of trusted proxy IPs for additional security
+            # WARNING: Enabling TRUST_PROXY without a proper reverse proxy allows attackers to bypass rate limiting!

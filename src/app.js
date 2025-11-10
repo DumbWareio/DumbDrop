@@ -26,8 +26,22 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-// Add this line to trust the first proxy
-app.set('trust proxy', 1);
+// Configure proxy trust based on environment (security-sensitive)
+if (config.trustProxy) {
+  if (config.trustedProxyIps && config.trustedProxyIps.length > 0) {
+    // Trust only specific proxy IPs
+    app.set('trust proxy', config.trustedProxyIps);
+    logger.warn(`Proxy trust enabled for specific IPs: ${config.trustedProxyIps.join(', ')}`);
+  } else {
+    // Trust first proxy only
+    app.set('trust proxy', 1);
+    logger.warn('Proxy trust enabled for first proxy - ensure reverse proxy is properly configured');
+  }
+} else {
+  // Secure default: do not trust proxy headers
+  app.set('trust proxy', false);
+  logger.info('Proxy trust disabled (secure default mode)');
+}
 
 // Middleware setup
 app.use(cors(getCorsOptions(BASE_URL)));

@@ -1,5 +1,6 @@
 const rateLimit = require('express-rate-limit');
 const { registerCleanupTask } = require('../utils/cleanup');
+const { getClientIp } = require('../utils/ipExtractor');
 
 // Create rate limiters
 const createLimiter = (options) => {
@@ -26,6 +27,8 @@ const initUploadLimiter = createLimiter({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  // Use secure IP extraction to prevent header spoofing
+  keyGenerator: (req) => getClientIp(req),
   // Skip rate limiting for chunk uploads within an existing batch
   skip: (req) => {
     return req.headers['x-batch-id'] !== undefined;
@@ -43,7 +46,9 @@ const chunkUploadLimiter = createLimiter({
     error: 'Upload rate limit exceeded. Please wait before continuing.'
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  // Use secure IP extraction to prevent header spoofing
+  keyGenerator: (req) => getClientIp(req)
 });
 
 /**
@@ -58,6 +63,8 @@ const pinVerifyLimiter = createLimiter({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  // Use secure IP extraction to prevent header spoofing
+  keyGenerator: (req) => getClientIp(req),
   // Apply strict rate limiting only to PIN verification, not PIN status checks
   skip: (req) => {
     return req.path === '/pin-required'; // Skip rate limiting for PIN requirement checks
@@ -75,7 +82,9 @@ const pinStatusLimiter = createLimiter({
     error: 'Too many requests. Please wait before trying again.'
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  // Use secure IP extraction to prevent header spoofing
+  keyGenerator: (req) => getClientIp(req)
 });
 
 /**
@@ -89,7 +98,9 @@ const downloadLimiter = createLimiter({
     error: 'Download rate limit exceeded. Please wait before downloading more files.'
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  // Use secure IP extraction to prevent header spoofing
+  keyGenerator: (req) => getClientIp(req)
 });
 
 module.exports = {

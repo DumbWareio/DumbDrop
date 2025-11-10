@@ -167,6 +167,20 @@ const config = {
    * Set via DUMBDROP_PIN in .env
    */
   pin: validatePin(process.env.DUMBDROP_PIN),
+  /**
+   * Trust proxy for X-Forwarded-For header (default: false for security)
+   * Only enable if behind a trusted reverse proxy
+   * Set via TRUST_PROXY in .env
+   */
+  trustProxy: process.env.TRUST_PROXY === 'true',
+  /**
+   * Comma-separated list of trusted proxy IPs (optional)
+   * Restricts which proxies can set X-Forwarded-For header
+   * Set via TRUSTED_PROXY_IPS in .env
+   */
+  trustedProxyIps: process.env.TRUSTED_PROXY_IPS ? 
+    process.env.TRUSTED_PROXY_IPS.split(',').map(ip => ip.trim()) : 
+    null,
   
   // =====================
   // =====================
