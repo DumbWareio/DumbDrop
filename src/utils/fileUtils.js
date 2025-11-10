@@ -283,6 +283,86 @@ function isValidBatchId(batchId) {
   return /^\d+-[a-z0-9]{9}$/.test(batchId);
 }
 
+/**
+ * Check if a file path is within the upload directory
+ * Works with both existing and non-existing files, and handles Docker bind mounts correctly
+ * This function does NOT require the file to exist, making it suitable for upload validation
+ * @param {string} filePath - The file path to check (may not exist yet)
+ * @param {string} uploadDir - The upload directory (must exist)
+ * @param {boolean} requireExists - If true, file must exist (default: false for compatibility with uploads)
+ * @returns {boolean} True if the path is within the upload directory
+ */
+function isPathWithinUploadDir(filePath, uploadDir, requireExists = false) {
+  try {
+    // Resolve the upload directory to its real path (should always exist)
+    // This handles symlinks in the upload directory path
+    let realUploadDir;
+    try {
+      realUploadDir = fs.realpathSync(uploadDir);
+    } catch (err) {
+      logger.error(`Upload directory does not exist or is inaccessible: ${uploadDir}`);
+      return false;
+    }
+    
+    // For the file path, we need different handling based on whether it exists
+    let resolvedFilePath;
+    if (requireExists) {
+      // When requireExists is true, the file must exist
+      if (!fs.existsSync(filePath)) {
+        // File must exist but doesn't - return false immediately
+        return false;
+      }
+      // File exists, resolve symlinks for security
+      try {
+        resolvedFilePath = fs.realpathSync(filePath);
+      } catch (err) {
+        logger.error(`Failed to resolve existing file path: ${filePath}`);
+        return false;
+      }
+    } else {
+      // For non-existing files (like during upload), use path.resolve
+      // This normalizes the path without requiring it to exist
+      resolvedFilePath = path.resolve(filePath);
+      
+      // Normalize both paths to use consistent separators
+      resolvedFilePath = path.normalize(resolvedFilePath);
+    }
+    
+    // Normalize the upload directory path as well
+    realUploadDir = path.normalize(realUploadDir);
+    
+    // Use path.relative() to check if file path is relative to upload dir
+    // This is more reliable than startsWith() checks, especially with bind mounts
+    const relativePath = path.relative(realUploadDir, resolvedFilePath);
+    
+    // If relative path is empty, the paths are the same (upload dir itself) - allow it
+    if (relativePath === '') {
+      return true;
+    }
+    
+    // If relative path starts with '..', it's outside the upload directory
+    // This catches path traversal attempts
+    if (relativePath.startsWith('..')) {
+      return false;
+    }
+    
+    // Additional check: On Windows, ensure we're on the same drive
+    if (process.platform === 'win32') {
+      const fileDrive = resolvedFilePath.split(':')[0];
+      const uploadDrive = realUploadDir.split(':')[0];
+      if (fileDrive !== uploadDrive) {
+        return false;
+      }
+    }
+    
+    // If we get here, the path is within the upload directory
+    return true;
+  } catch (err) {
+    logger.error(`Path validation error: ${err.message}`, err);
+    return false;
+  }
+}
+
 module.exports = {
   formatFileSize,
   calculateDirectorySize,
@@ -293,5 +373,6 @@ module.exports = {
   sanitizePathPreserveDirs,
   sanitizeFilenameSafe,
   sanitizePathPreserveDirsSafe,
-  isValidBatchId
+  isValidBatchId,
+  isPathWithinUploadDir
 }; 

@@ -10,7 +10,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const { config } = require('../config');
 const logger = require('../utils/logger');
-const { formatFileSize, sanitizeFilenameSafe } = require('../utils/fileUtils');
+const { formatFileSize, sanitizeFilenameSafe, isPathWithinUploadDir } = require('../utils/fileUtils');
 
 /**
  * Safely encode filename for Content-Disposition header
@@ -43,46 +43,6 @@ function createSafeContentDisposition(filename) {
 }
 
 /**
- * Check if a file path is within the upload directory
- * Uses path.relative() for more reliable checking that works with bind mounts
- * This approach is more robust than simple startsWith() checks which can fail
- * with Docker bind mounts that resolve paths differently
- * @param {string} filePath - The file path to check
- * @param {string} uploadDir - The upload directory
- * @returns {boolean} True if the path is within the upload directory
- */
-function isPathWithinUploadDir(filePath, uploadDir) {
-  try {
-    // Resolve real filesystem paths to defend against symlink attacks
-    // This will resolve any symlinks to their actual targets
-    const realFilePath = fs.realpathSync(filePath);
-    const realUploadDir = fs.realpathSync(uploadDir);
-    
-    // Use path.relative() to check if file path is relative to upload dir
-    // This is more reliable than startsWith() checks, especially with bind mounts
-    const relativePath = path.relative(realUploadDir, realFilePath);
-    
-    // If relative path is empty, the paths are the same (upload dir itself) - allow it
-    if (relativePath === '') {
-      return true;
-    }
-    
-    // If relative path starts with '..', it's outside the upload directory
-    // Any symlink targets outside uploadDir will be detected and rejected
-    if (relativePath.startsWith('..')) {
-      return false;
-    }
-    
-    // If we get here, the path is within the upload directory
-    // path.relative() will return a relative path without '..' for valid paths
-    return true;
-  } catch (err) {
-    logger.error(`Path validation error: ${err.message}`, err);
-    return false;
-  }
-}
-
-/**
  * Get file information
  */
 router.get('/info/*', async (req, res) => {
@@ -90,7 +50,8 @@ router.get('/info/*', async (req, res) => {
   
   try {
     // Ensure the path is within the upload directory (security check)
-    if (!isPathWithinUploadDir(filePath, config.uploadDir)) {
+    // Use requireExists=true since we're getting info on an existing file
+    if (!isPathWithinUploadDir(filePath, config.uploadDir, true)) {
       logger.warn(`Attempted path traversal attack: ${req.params[0]}`);
       return res.status(403).json({ error: 'Access denied' });
     }
@@ -123,11 +84,12 @@ router.get('/download/*', async (req, res) => {
   try {
     // Ensure the file is within the upload directory (security check)
     // This must be done BEFORE any filesystem operations to prevent path traversal
-    if (!isPathWithinUploadDir(filePath, config.uploadDir)) {
+    // Use requireExists=true since we're downloading an existing file
+    if (!isPathWithinUploadDir(filePath, config.uploadDir, true)) {
       logger.warn(`Attempted path traversal attack: ${req.params[0]}`);
       return res.status(403).json({ error: 'Access denied' });
     }
-    
+
     await fs.access(filePath);
     
     // Set headers for download with safe Content-Disposition
@@ -276,7 +238,8 @@ router.delete('/*', async (req, res) => {
   
   try {
     // Ensure the path is within the upload directory (security check)
-    if (!isPathWithinUploadDir(itemPath, config.uploadDir)) {
+    // Use requireExists=true since we're deleting an existing file
+    if (!isPathWithinUploadDir(itemPath, config.uploadDir, true)) {
       logger.warn(`Attempted path traversal attack: ${req.params[0]}`);
       return res.status(403).json({ error: 'Access denied' });
     }
@@ -319,7 +282,8 @@ router.put('/rename/*', async (req, res) => {
   
   try {
     // Ensure the current path is within the upload directory (security check)
-    if (!isPathWithinUploadDir(currentPath, config.uploadDir)) {
+    // Use requireExists=true since we're renaming an existing file
+    if (!isPathWithinUploadDir(currentPath, config.uploadDir, true)) {
       logger.warn(`Attempted path traversal attack: ${req.params[0]}`);
       return res.status(403).json({ error: 'Access denied' });
     }
@@ -341,7 +305,8 @@ router.put('/rename/*', async (req, res) => {
     const newPath = path.join(currentDir, sanitizedNewName);
     
     // Ensure the new path is also within the upload directory
-    if (!isPathWithinUploadDir(newPath, config.uploadDir)) {
+    // Use requireExists=false since the new path doesn't exist yet
+    if (!isPathWithinUploadDir(newPath, config.uploadDir, false)) {
       logger.warn(`Attempted to rename outside upload directory: ${newPath}`);
       return res.status(403).json({ error: 'Invalid destination path' });
     }

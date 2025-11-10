@@ -12,7 +12,7 @@ const fs = require('fs').promises; // Use promise-based fs
 const fsSync = require('fs'); // For sync checks like existsSync
 const { config } = require('../config');
 const logger = require('../utils/logger');
-const { getUniqueFolderPath, sanitizePathPreserveDirsSafe, isValidBatchId } = require('../utils/fileUtils');
+const { getUniqueFolderPath, sanitizePathPreserveDirsSafe, isValidBatchId, isPathWithinUploadDir } = require('../utils/fileUtils');
 const { sendNotification } = require('../services/notifications');
 const { isDemoMode } = require('../utils/demoMode');
 
@@ -185,6 +185,13 @@ router.post('/init', async (req, res) => {
     // --- Determine Paths & Handle Folders ---
     const uploadId = crypto.randomBytes(16).toString('hex');
     let finalFilePath = path.join(config.uploadDir, safeFilename);
+    
+    // Validate that the constructed path is within the upload directory
+    if (!isPathWithinUploadDir(finalFilePath, config.uploadDir, false)) {
+      logger.error(`Path traversal detected in upload init: ${safeFilename} -> ${finalFilePath}`);
+      return res.status(403).json({ error: 'Invalid file path' });
+    }
+    
     const pathParts = safeFilename.split('/').filter(Boolean);
 
     if (pathParts.length > 1) {
@@ -211,6 +218,13 @@ router.post('/init', async (req, res) => {
       }
       pathParts[0] = newFolderName;
       finalFilePath = path.join(config.uploadDir, ...pathParts);
+      
+      // Validate the updated path
+      if (!isPathWithinUploadDir(finalFilePath, config.uploadDir, false)) {
+        logger.error(`Path traversal detected after folder mapping: ${pathParts.join('/')} -> ${finalFilePath}`);
+        return res.status(403).json({ error: 'Invalid file path' });
+      }
+      
       await fs.mkdir(path.dirname(finalFilePath), { recursive: true });
     } else {
       await fs.mkdir(config.uploadDir, { recursive: true }); // Ensure base upload dir exists
@@ -230,11 +244,24 @@ router.post('/init', async (req, res) => {
     if (checkPath !== finalFilePath) {
       logger.info(`Using unique final path: ${checkPath}`);
       finalFilePath = checkPath;
+      
+      // Validate the unique path
+      if (!isPathWithinUploadDir(finalFilePath, config.uploadDir, false)) {
+        logger.error(`Path traversal detected in unique path: ${finalFilePath}`);
+        return res.status(403).json({ error: 'Invalid file path' });
+      }
+      
       // If path changed, ensure directory exists (might be needed if baseName contained '/')
       await fs.mkdir(path.dirname(finalFilePath), { recursive: true });
     }
 
     const partialFilePath = finalFilePath + '.partial';
+    
+    // Validate the partial file path as well
+    if (!isPathWithinUploadDir(partialFilePath, config.uploadDir, false)) {
+      logger.error(`Path traversal detected in partial path: ${partialFilePath}`);
+      return res.status(403).json({ error: 'Invalid file path' });
+    }
 
     // --- Create and Persist Metadata ---
     const metadata = {
