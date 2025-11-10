@@ -306,8 +306,13 @@ function isPathWithinUploadDir(filePath, uploadDir, requireExists = false) {
     
     // For the file path, we need different handling based on whether it exists
     let resolvedFilePath;
-    if (requireExists && fs.existsSync(filePath)) {
-      // For existing files, resolve symlinks for security
+    if (requireExists) {
+      // When requireExists is true, the file must exist
+      if (!fs.existsSync(filePath)) {
+        // File must exist but doesn't - return false immediately
+        return false;
+      }
+      // File exists, resolve symlinks for security
       try {
         resolvedFilePath = fs.realpathSync(filePath);
       } catch (err) {
