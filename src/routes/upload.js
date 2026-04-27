@@ -26,6 +26,46 @@ const folderMappings = new Map();
 const batchActivity = new Map();
 
 const BATCH_TIMEOUT = 30 * 60 * 1000; // 30 minutes for batch/folderMapping cleanup
+const DEFAULT_FAILED_UPLOAD_RETENTION_MINUTES = 60;
+const failedUploadRetentionMinutes = (() => {
+  const rawValue = process.env.FAILED_UPLOAD_RETENTION_MINUTES;
+  if (rawValue === undefined) return DEFAULT_FAILED_UPLOAD_RETENTION_MINUTES;
+
+  const parsed = parseInt(rawValue, 10);
+  if (isNaN(parsed) || parsed <= 0) {
+    logger.warn(
+      `Invalid FAILED_UPLOAD_RETENTION_MINUTES value: "${rawValue}". Using default ${DEFAULT_FAILED_UPLOAD_RETENTION_MINUTES} minutes.`
+    );
+    return DEFAULT_FAILED_UPLOAD_RETENTION_MINUTES;
+  }
+
+  return parsed;
+})();
+const FAILED_UPLOAD_RETENTION_MS = failedUploadRetentionMinutes * 60 * 1000; // Keep failed partial uploads before cleanup
+function encodeFilePathForUrl(filePath) {
+  return filePath.split('/').map(part => encodeURIComponent(part)).join('/');
+}
+
+function getDownloadUrl(req, storedFilePath) {
+  const relativePath = path.relative(config.uploadDir, storedFilePath).split(path.sep).join('/');
+  const encodedPath = encodeFilePathForUrl(relativePath);
+  const baseOrigin = config.publicDomain || `${req.protocol}://${req.get('host')}`;
+  return `${baseOrigin}/${encodedPath}`;
+}
+
+function getUploadedFilePayload(req, storedFilePath, uploadedAt = Date.now()) {
+  const relativePath = path.relative(config.uploadDir, storedFilePath).split(path.sep).join('/');
+  const uploadedAtIso = new Date(uploadedAt).toISOString();
+  const expiresAtIso = new Date(uploadedAt + config.fileRetentionMs).toISOString();
+
+  return {
+    path: relativePath,
+    filename: path.basename(relativePath),
+    downloadUrl: getDownloadUrl(req, storedFilePath),
+    uploadedAt: uploadedAtIso,
+    expiresAt: expiresAtIso
+  };
+}
 
 // --- Helper Functions for Metadata ---
 
@@ -117,6 +157,73 @@ function stopBatchCleanup() {
 }
 if (!process.env.DISABLE_BATCH_CLEANUP) {
   startBatchCleanup();
+}
+
+let failedUploadCleanupInterval;
+async function cleanupFailedUploads(referenceTime = Date.now()) {
+  let metadataFiles;
+  try {
+    metadataFiles = await fs.readdir(METADATA_DIR);
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      logger.error(`Failed to list metadata directory for failed upload cleanup: ${err.message}`);
+    }
+    return;
+  }
+
+  let cleanedCount = 0;
+  for (const file of metadataFiles) {
+    if (!file.endsWith('.meta')) continue;
+
+    const uploadId = file.slice(0, -5);
+    try {
+      const metadata = await readUploadMetadata(uploadId);
+      if (!metadata || !metadata.failedAt) continue;
+
+      if ((referenceTime - metadata.failedAt) < FAILED_UPLOAD_RETENTION_MS) continue;
+
+      if (metadata.partialFilePath && isPathWithinUploadDir(metadata.partialFilePath, config.uploadDir, false)) {
+        try {
+          await fs.unlink(metadata.partialFilePath);
+        } catch (unlinkErr) {
+          if (unlinkErr.code !== 'ENOENT') {
+            logger.warn(`Failed to remove partial file for failed upload ${uploadId}: ${unlinkErr.message}`);
+          }
+        }
+      }
+
+      await deleteUploadMetadata(uploadId);
+      cleanedCount++;
+    } catch (err) {
+      logger.warn(`Failed cleaning up failed upload metadata ${uploadId}: ${err.message}`);
+    }
+  }
+
+  if (cleanedCount > 0) {
+    logger.info(`Cleaned up ${cleanedCount} failed uploads after retention period`);
+  }
+}
+
+function startFailedUploadCleanup() {
+  if (failedUploadCleanupInterval) clearInterval(failedUploadCleanupInterval);
+  failedUploadCleanupInterval = setInterval(() => {
+    cleanupFailedUploads().catch((err) => {
+      logger.error(`Failed upload cleanup interval error: ${err.message}`);
+    });
+  }, 60 * 1000);
+  failedUploadCleanupInterval.unref();
+  return failedUploadCleanupInterval;
+}
+
+function stopFailedUploadCleanup() {
+  if (failedUploadCleanupInterval) {
+    clearInterval(failedUploadCleanupInterval);
+    failedUploadCleanupInterval = null;
+  }
+}
+
+if (!process.env.DISABLE_FAILED_UPLOAD_CLEANUP) {
+  startFailedUploadCleanup();
 }
 
 // --- Routes ---
@@ -280,10 +387,12 @@ router.post('/init', async (req, res) => {
     logger.info(`Initialized persistent upload: ${uploadId} for ${safeFilename} -> ${finalFilePath}`);
 
     // --- Handle Zero-Byte Files --- // (Important: Handle *after* metadata potentially exists)
+    let completedFile = null;
     if (size === 0) {
       try {
         await fs.writeFile(finalFilePath, ''); // Create the empty file
         logger.success(`Completed zero-byte file upload: ${metadata.originalFilename} as ${finalFilePath}`);
+        completedFile = getUploadedFilePayload(req, finalFilePath);
         await deleteUploadMetadata(uploadId); // Clean up metadata since it's done
         sendNotification(metadata.originalFilename, 0, config);
       } catch (writeErr) {
@@ -293,7 +402,11 @@ router.post('/init', async (req, res) => {
       }
     }
 
-    res.json({ uploadId });
+    if (completedFile) {
+      return res.json({ uploadId, completed: true, file: completedFile });
+    }
+
+    res.json({ uploadId, completed: false });
 
   } catch (err) {
     logger.error(`Upload initialization failed: ${err.message} ${err.stack}`);
@@ -347,6 +460,11 @@ router.post('/chunk/:uploadId', express.raw({
     // Update batch activity using metadata's batchId
     if (metadata.batchId && isValidBatchId(metadata.batchId)) {
       batchActivity.set(metadata.batchId, Date.now());
+    }
+
+    if (metadata.failedAt) {
+      // Upload resumed after failure; clear failed marker so cleanup won't remove active data.
+      delete metadata.failedAt;
     }
 
     // --- Sanity Checks & Idempotency ---
@@ -414,11 +532,13 @@ router.post('/chunk/:uploadId', express.raw({
     await writeUploadMetadata(uploadId, metadata);
 
     // --- Check for Completion --- // Now happens after metadata update
+    let completedFile = null;
     if (metadata.bytesReceived >= metadata.fileSize) {
       logger.info(`Upload ${uploadId} (${metadata.originalFilename}) completed ${metadata.bytesReceived} bytes.`);
       try {
         await fs.rename(metadata.partialFilePath, metadata.filePath);
         logger.success(`Upload completed and finalized: ${metadata.originalFilename} as ${metadata.filePath} (${metadata.fileSize} bytes)`);
+        completedFile = getUploadedFilePayload(req, metadata.filePath, metadata.createdAt);
         await deleteUploadMetadata(uploadId); // Clean up metadata file AFTER successful rename
         sendNotification(metadata.originalFilename, metadata.fileSize, config);
       } catch (renameErr) {
@@ -434,7 +554,12 @@ router.post('/chunk/:uploadId', express.raw({
       }
     }
 
-    res.json({ bytesReceived: metadata.bytesReceived, progress });
+    res.json({
+      bytesReceived: metadata.bytesReceived,
+      progress,
+      completed: metadata.bytesReceived >= metadata.fileSize,
+      file: completedFile
+    });
 
   } catch (err) {
     // Ensure file handle is closed on error
@@ -485,10 +610,43 @@ router.post('/cancel/:uploadId', async (req, res) => {
   }
 });
 
+// Mark upload as failed and keep partial data for temporary recovery.
+router.post('/fail/:uploadId', async (req, res) => {
+  // DEMO MODE CHECK
+  if (isDemoMode()) {
+    logger.info(`[DEMO] Upload marked failed: ${req.params.uploadId}`);
+    return res.json({ message: 'Upload marked failed (Demo)' });
+  }
+
+  const { uploadId } = req.params;
+
+  try {
+    const metadata = await readUploadMetadata(uploadId);
+    if (!metadata) {
+      return res.json({ message: 'Upload session not found or already completed' });
+    }
+
+    if (!metadata.failedAt) {
+      metadata.failedAt = Date.now();
+      await writeUploadMetadata(uploadId, metadata);
+      logger.info(`Marked upload as failed for delayed cleanup: ${uploadId}`);
+    }
+
+    return res.json({ message: 'Upload marked as failed' });
+  } catch (err) {
+    logger.error(`Failed to mark upload as failed ${uploadId}: ${err.message}`);
+    return res.status(500).json({ error: 'Failed to mark upload as failed' });
+  }
+});
+
 module.exports = {
   router,
   startBatchCleanup,
   stopBatchCleanup,
+  startFailedUploadCleanup,
+  stopFailedUploadCleanup,
+  cleanupFailedUploads,
+  FAILED_UPLOAD_RETENTION_MS,
   // Export for testing if required
   readUploadMetadata,
   writeUploadMetadata,

@@ -65,6 +65,10 @@
             <!-- PIN inputs will be dynamically added here -->
         </form>
         <p id="pin-error" class="error-message"></p>
+        <p id="termsNotice" class="legal-links">
+            By using this site, you agree to the
+            <a id="termsLink" href="{{TERMS_LINK}}" target="_blank" rel="noopener noreferrer">Terms and Conditions</a>.
+        </p>
     </div>
 
     <script>
@@ -72,6 +76,15 @@
         const savedTheme = localStorage.getItem('theme') || 
             (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         document.documentElement.setAttribute('data-theme', savedTheme);
+
+        const TERMS_LINK = '{{TERMS_LINK}}';
+        const termsNotice = document.getElementById('termsNotice');
+        const termsLink = document.getElementById('termsLink');
+        if (!TERMS_LINK || TERMS_LINK === '{{TERMS_LINK}}') {
+            termsNotice.style.display = 'none';
+        } else {
+            termsLink.href = TERMS_LINK;
+        }
 
         let pinLength = 4;  // Default length, will be updated from server
 

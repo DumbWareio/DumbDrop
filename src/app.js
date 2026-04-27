@@ -14,12 +14,43 @@ const fsPromises = require('fs').promises;
 
 const { config, validateConfig } = require('./config');
 const logger = require('./utils/logger');
-const { ensureDirectoryExists } = require('./utils/fileUtils');
+const { ensureDirectoryExists, isPathWithinUploadDir } = require('./utils/fileUtils');
 const { getHelmetConfig, requirePin } = require('./middleware/security');
 const { safeCompare } = require('./utils/security');
 const { initUploadLimiter, pinVerifyLimiter, pinStatusLimiter, downloadLimiter } = require('./middleware/rateLimiter');
 const { injectDemoBanner, demoMiddleware } = require('./utils/demoMode');
 const { originValidationMiddleware, getCorsOptions } = require('./middleware/cors');
+
+function createSafeContentDisposition(filename) {
+  const basename = path.basename(filename);
+  // eslint-disable-next-line no-control-regex
+  const sanitized = basename.replace(/[\u0000-\u001F\u007F"\\]/g, '_');
+
+  if (/^[\u0020-\u007E]*$/.test(sanitized)) {
+    const escaped = sanitized.replace(/["\\]/g, '\\$&');
+    return `attachment; filename="${escaped}"`;
+  }
+
+  const encoded = encodeURIComponent(sanitized);
+  const asciiSafe = sanitized.replace(/[^\u0020-\u007E]/g, '_');
+  return `attachment; filename="${asciiSafe}"; filename*=UTF-8''${encoded}`;
+}
+
+const RESERVED_SHORT_LINK_PATHS = new Set([
+  '',
+  'api',
+  'index.html',
+  'login.html',
+  'styles.css',
+  'config.js',
+  'manifest.json',
+  'asset-manifest.json',
+  'service-worker.js',
+  'assets',
+  'toastify'
+]);
+
+const RESERVED_SHORT_LINK_PREFIXES = ['api/', 'assets/', 'toastify/'];
 
 // Create Express app
 const app = express();
@@ -48,6 +79,55 @@ app.use(cors(getCorsOptions(BASE_URL)));
 app.use(cookieParser());
 app.use(express.json());
 app.use(helmet(getHelmetConfig()));
+
+// Public short-link downloads, e.g. /mask.zip or /folder/mask.zip
+app.get('/*', async (req, res, next) => {
+  const rawPath = req.path.replace(/^\/+/, '');
+  const normalizedPath = rawPath.toLowerCase();
+
+  if (!rawPath || rawPath.endsWith('/')) return next();
+  if (RESERVED_SHORT_LINK_PATHS.has(normalizedPath)) return next();
+  if (RESERVED_SHORT_LINK_PREFIXES.some(prefix => normalizedPath.startsWith(prefix))) return next();
+
+  let relativeUploadPath;
+  try {
+    relativeUploadPath = rawPath
+      .split('/')
+      .map(segment => decodeURIComponent(segment))
+      .join('/');
+  } catch {
+    return next();
+  }
+
+  const filePath = path.join(config.uploadDir, relativeUploadPath);
+  if (!isPathWithinUploadDir(filePath, config.uploadDir, true)) {
+    return next();
+  }
+
+  try {
+    const stats = await fsPromises.stat(filePath);
+    if (!stats.isFile()) return next();
+
+    res.setHeader('Content-Disposition', createSafeContentDisposition(relativeUploadPath));
+    res.setHeader('Content-Type', 'application/octet-stream');
+
+    const fileStream = fs.createReadStream(filePath);
+    fileStream.pipe(res);
+    fileStream.on('error', (err) => {
+      logger.error(`Short-link file streaming error: ${err.message}`);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to download file' });
+      }
+    });
+  } catch (err) {
+    if (err.code === 'ENOENT' || err.code === 'ENOTDIR') {
+      return next();
+    }
+
+    logger.error(`Short-link download failed: ${err.message}`);
+    return res.status(500).json({ error: 'Failed to download file' });
+  }
+});
 
 // --- AUTHENTICATION MIDDLEWARE FOR ALL PROTECTED ROUTES ---
 app.use((req, res, next) => {
@@ -87,11 +167,17 @@ const authRoutes = require('./routes/auth');
 
 // Use routes with appropriate middleware
 // Apply strict rate limiting to PIN verification, but more permissive to status checks
+const filesPinMiddleware = requirePin(config.pin);
 app.use('/api/auth/pin-required', pinStatusLimiter);
 app.use('/api/auth/logout', pinStatusLimiter);
 app.use('/api/auth', pinVerifyLimiter, authRoutes);
 app.use('/api/upload', requirePin(config.pin), initUploadLimiter, uploadRouter);
-app.use('/api/files', requirePin(config.pin), downloadLimiter, fileRoutes);
+app.use('/api/files', (req, res, next) => {
+  if (req.path.startsWith('/download/')) {
+    return next();
+  }
+  return filesPinMiddleware(req, res, next);
+}, downloadLimiter, fileRoutes);
 
 // Root route
 app.get('/', (req, res) => {
@@ -102,6 +188,7 @@ app.get('/', (req, res) => {
   
   let html = fs.readFileSync(path.join(__dirname, '../public', 'index.html'), 'utf8');
   html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
+  html = html.replace(/{{TERMS_LINK}}/g, config.termsLink || '');
   html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
   html = html.replace('{{MAX_RETRIES}}', config.clientMaxRetries.toString());
   html = html.replace('{{SHOW_FILE_LIST}}', config.showFileList.toString());
@@ -118,6 +205,7 @@ app.get('/login.html', (req, res) => {
   
   let html = fs.readFileSync(path.join(__dirname, '../public', 'login.html'), 'utf8');
   html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
+  html = html.replace(/{{TERMS_LINK}}/g, config.termsLink || '');
   html = injectDemoBanner(html);
   res.send(html);
 });
@@ -132,9 +220,11 @@ app.use((req, res, next) => {
     const filePath = path.join(__dirname, '../public', req.path);
     let html = fs.readFileSync(filePath, 'utf8');
     html = html.replace(/{{SITE_TITLE}}/g, config.siteTitle);
+    html = html.replace(/{{TERMS_LINK}}/g, config.termsLink || '');
     if (req.path === '/index.html' || req.path === 'index.html') {
       html = html.replace('{{AUTO_UPLOAD}}', config.autoUpload.toString());
       html = html.replace('{{MAX_RETRIES}}', config.clientMaxRetries.toString());
+      html = html.replace('{{SHOW_FILE_LIST}}', config.showFileList.toString());
     }
     // Ensure baseUrl has a trailing slash
     const baseUrlWithSlash = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';

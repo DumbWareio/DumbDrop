@@ -29,7 +29,7 @@ function generateAssetManifest() {
 function generatePWAManifest() {
   generateAssetManifest(); // fetched later in service-worker
 
-  const siteTitle = process.env.DUMBDROP_TITLE || process.env.SITE_TITLE || "DumbDrop";
+  const siteTitle = process.env.DUMBDROP_TITLE || process.env.SITE_TITLE || "WickedYoda's DumbDrop";
   const pwaManifest = {
       name: siteTitle,
       short_name: siteTitle,

@@ -83,6 +83,40 @@ h1 {
     font-weight: 700;
 }
 
+.legal-warning {
+    background: color-mix(in srgb, var(--danger-color) 10%, var(--container-bg));
+    border: 1px solid color-mix(in srgb, var(--danger-color) 35%, var(--border-color));
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+.legal-warning-top {
+    margin: -10px 0 16px;
+}
+
+.legal-warning-bottom {
+    margin-top: 20px;
+    text-align: center;
+}
+
+.legal-warning p {
+    margin: 0;
+    color: var(--text-color);
+}
+
+.legal-warning a {
+    color: var(--highlight-hover);
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+.legal-warning a:hover {
+    opacity: 0.9;
+}
+
 .upload-container {
     background: var(--container-bg);
     border-radius: 10px;
@@ -163,6 +197,22 @@ button:disabled {
     display: flex;
     gap: 10px;
     justify-content: center;
+}
+
+.legal-links {
+    margin-top: 20px;
+    font-size: 0.9rem;
+    color: var(--text-color);
+    opacity: 0.8;
+}
+
+.legal-links a {
+    color: var(--highlight-color);
+    text-decoration: none;
+}
+
+.legal-links a:hover {
+    text-decoration: underline;
 }
 
 /* Progress Bar Styles */
@@ -347,6 +397,11 @@ button:disabled {
     
     .upload-container {
         padding: 20px 10px;
+    }
+
+    .legal-warning {
+        font-size: 0.85rem;
+        padding: 9px 10px;
     }
 
     .pin-container {

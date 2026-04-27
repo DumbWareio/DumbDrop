@@ -1,6 +1,6 @@
 services:
     dumbdrop:
-        image: dumbwareio/dumbdrop:latest
+        image: ghcr.io/wickedyoda/dumbdrop:latest
         # build: .
         container_name: dumbdrop 
         restart: unless-stopped 
@@ -9,14 +9,21 @@ services:
         volumes:
             # Replace "./local_uploads" ( before the colon ) with the path where the files land
             - ./local_uploads:/app/uploads 
+            # Persistent application logs
+            - ./logs:/logs
         environment:  # Environment variables for the DumbDrop service
             # Explicitly set upload directory inside the container
             UPLOAD_DIR: /app/uploads
+            LOG_DIR: /logs
+            LOG_ROTATION_DAYS: 30
+            LOG_RETENTION_DAYS: 90
+            ACCESS_LOG_ENABLED: true
             DUMBDROP_TITLE: DumbDrop  # The title shown in the web interface
             MAX_FILE_SIZE: 1024  # Maximum file size in MB
             DUMBDROP_PIN: 123456  # Optional PIN protection (4-10 digits, leave empty to disable)
             AUTO_UPLOAD: true  # Upload without clicking button
             BASE_URL: http://localhost:3000  # The base URL for the application, You must update this to the url you use to access your site
+            PUBLIC_DOMAIN: http://localhost:3000  # Public domain used in generated file links
             
             # Comma-separated list of allowed origins for CORS
             # (default: '*' if empty, replace with your base_url if you want to restrict only to base_url)
@@ -32,6 +39,7 @@ services:
             # APPRISE_MESSAGE: "New file uploaded - {filename} ({size}), Storage used {storage}"  # Notification message template with placeholders: {filename}, {size}, {storage}
             # APPRISE_SIZE_UNIT: "Auto"  # Size unit for notifications (B, KB, MB, GB, TB, or Auto)
             # ALLOWED_EXTENSIONS: ".jpg,.jpeg,.png,.pdf,.doc,.docx,.txt"  # Comma-separated list of allowed file extensions (default: all allowed)
+            # FAILED_UPLOAD_RETENTION_MINUTES: 60  # Retain failed .partial uploads this many minutes before cleanup
             
             # Reverse Proxy / Security Settings (IMPORTANT: Read documentation before enabling)
             # TRUST_PROXY: false  # Set to 'true' ONLY if behind a trusted reverse proxy (Nginx, Caddy, Traefik, etc.)

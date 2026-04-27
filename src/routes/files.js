@@ -12,6 +12,16 @@ const { config } = require('../config');
 const logger = require('../utils/logger');
 const { formatFileSize, sanitizeFilenameSafe, isPathWithinUploadDir } = require('../utils/fileUtils');
 
+function encodePathForUrl(filePath) {
+  return filePath.split('/').map(part => encodeURIComponent(part)).join('/');
+}
+
+function buildDownloadUrl(req, relativePath) {
+  const encodedPath = encodePathForUrl(relativePath);
+  const baseOrigin = config.publicDomain || `${req.protocol}://${req.get('host')}`;
+  return `${baseOrigin}/${encodedPath}`;
+}
+
 /**
  * Safely encode filename for Content-Disposition header
  * Prevents header injection and handles special characters
@@ -62,9 +72,15 @@ router.get('/info/*', async (req, res) => {
       size: stats.size,
       formattedSize: formatFileSize(stats.size),
       uploadDate: stats.mtime,
+      expiresAt: new Date(stats.mtime.getTime() + config.fileRetentionMs),
       mimetype: path.extname(req.params[0]).slice(1),
       type: stats.isDirectory() ? 'directory' : 'file'
     };
+
+    if (!stats.isDirectory()) {
+      const normalizedPath = req.params[0].split(path.sep).join('/');
+      fileInfo.downloadUrl = buildDownloadUrl(req, normalizedPath);
+    }
 
     res.json(fileInfo);
   } catch (err) {
@@ -120,7 +136,7 @@ router.get('/download/*', async (req, res) => {
  */
 router.get('/', async (req, res) => {
   try {
-    const items = await getDirectoryContents(config.uploadDir);
+    const items = await getDirectoryContents(config.uploadDir, '', req);
     
     // Calculate total size across all files
     const totalSize = calculateTotalSize(items);
@@ -140,7 +156,7 @@ router.get('/', async (req, res) => {
 /**
  * Recursively get directory contents
  */
-async function getDirectoryContents(dirPath, relativePath = '') {
+async function getDirectoryContents(dirPath, relativePath = '', req) {
   const items = [];
   
   try {
@@ -159,7 +175,7 @@ async function getDirectoryContents(dirPath, relativePath = '') {
         const stats = await fs.stat(fullPath);
         
         if (stats.isDirectory()) {
-          const subItems = await getDirectoryContents(fullPath, itemRelativePath);
+          const subItems = await getDirectoryContents(fullPath, itemRelativePath, req);
           items.push({
             name: entry,
             type: 'directory',
@@ -167,6 +183,7 @@ async function getDirectoryContents(dirPath, relativePath = '') {
             size: calculateTotalSize(subItems),
             formattedSize: formatFileSize(calculateTotalSize(subItems)),
             uploadDate: stats.mtime,
+            expiresAt: new Date(stats.mtime.getTime() + config.fileRetentionMs),
             children: subItems
           });
         } else if (stats.isFile()) {
@@ -177,6 +194,8 @@ async function getDirectoryContents(dirPath, relativePath = '') {
             size: stats.size,
             formattedSize: formatFileSize(stats.size),
             uploadDate: stats.mtime,
+            expiresAt: new Date(stats.mtime.getTime() + config.fileRetentionMs),
+            downloadUrl: buildDownloadUrl(req, itemRelativePath),
             extension: path.extname(entry).toLowerCase()
           });
         }

@@ -15,6 +15,7 @@ const crypto = require('crypto');
 
 // Import the app
 const { app, initialize, config } = require('../src/app');
+const { readUploadMetadata, cleanupFailedUploads, FAILED_UPLOAD_RETENTION_MS } = require('../src/routes/upload');
 
 let server;
 let baseUrl;
@@ -161,6 +162,9 @@ describe('Upload API Tests', () => {
       
       assert.strictEqual(response.status, 200);
       assert.ok(response.data.uploadId);
+      assert.strictEqual(response.data.completed, true);
+      assert.ok(response.data.file);
+      assert.ok(response.data.file.downloadUrl.endsWith('/empty.txt'));
     });
   });
   
@@ -196,6 +200,41 @@ describe('Upload API Tests', () => {
       
       assert.strictEqual(chunkResponse.status, 200);
       assert.ok(chunkResponse.data.bytesReceived > 0);
+    });
+
+    it('should return download link when upload completes', async () => {
+      const content = Buffer.from('hello');
+
+      const initResponse = await makeRequest({
+        host: 'localhost',
+        port: server.address().port,
+        path: '/api/upload/init',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }, {
+        filename: 'complete-test.txt',
+        fileSize: content.length,
+      });
+
+      const { uploadId } = initResponse.data;
+
+      const chunkResponse = await makeRequest({
+        host: 'localhost',
+        port: server.address().port,
+        path: `/api/upload/chunk/${uploadId}`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+        },
+      }, content);
+
+      assert.strictEqual(chunkResponse.status, 200);
+      assert.strictEqual(chunkResponse.data.completed, true);
+      assert.ok(chunkResponse.data.file);
+      assert.ok(typeof chunkResponse.data.file.downloadUrl === 'string');
+      assert.ok(chunkResponse.data.file.downloadUrl.endsWith(`/${chunkResponse.data.file.filename}`));
     });
     
     it('should reject chunks for invalid uploadId', async () => {
@@ -246,10 +285,76 @@ describe('Upload API Tests', () => {
       assert.strictEqual(cancelResponse.status, 200);
     });
   });
+
+  describe('POST /api/upload/fail/:uploadId', () => {
+    it('should keep partial files briefly and delete them after retention period', async () => {
+      const fileContent = Buffer.from('partial-upload-data');
+
+      const initResponse = await makeRequest({
+        host: 'localhost',
+        port: server.address().port,
+        path: '/api/upload/init',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }, {
+        filename: 'failed-retention.txt',
+        fileSize: fileContent.length * 2,
+      });
+
+      assert.strictEqual(initResponse.status, 200);
+      const { uploadId } = initResponse.data;
+
+      const chunkResponse = await makeRequest({
+        host: 'localhost',
+        port: server.address().port,
+        path: `/api/upload/chunk/${uploadId}`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+        },
+      }, fileContent);
+
+      assert.strictEqual(chunkResponse.status, 200);
+      assert.strictEqual(chunkResponse.data.completed, false);
+
+      const failResponse = await makeRequest({
+        host: 'localhost',
+        port: server.address().port,
+        path: `/api/upload/fail/${uploadId}`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      assert.strictEqual(failResponse.status, 200);
+
+      const failedMetadata = await readUploadMetadata(uploadId);
+      assert.ok(failedMetadata);
+      assert.ok(typeof failedMetadata.failedAt === 'number');
+
+      const partialPath = failedMetadata.partialFilePath;
+      await fs.stat(partialPath);
+
+      await cleanupFailedUploads(failedMetadata.failedAt + FAILED_UPLOAD_RETENTION_MS - 1);
+
+      const metadataBeforeExpiry = await readUploadMetadata(uploadId);
+      assert.ok(metadataBeforeExpiry);
+      await fs.stat(partialPath);
+
+      await cleanupFailedUploads(failedMetadata.failedAt + FAILED_UPLOAD_RETENTION_MS + 1);
+
+      const metadataAfterExpiry = await readUploadMetadata(uploadId);
+      assert.strictEqual(metadataAfterExpiry, null);
+      await assert.rejects(() => fs.stat(partialPath));
+    });
+  });
   
   describe('Batch uploads', () => {
     it('should handle multiple files with same batch ID', async () => {
-      const batchId = `batch-${crypto.randomBytes(4).toString('hex')}`;
+      const batchId = `${Date.now()}-${crypto.randomBytes(5).toString('hex').slice(0, 9)}`;
       
       // Initialize first file
       const file1Response = await makeRequest({

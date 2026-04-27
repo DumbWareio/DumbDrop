@@ -1,5 +1,5 @@
 # Base stage for shared configurations
-FROM node:22-alpine as base
+FROM node:22-alpine AS base
 
 # Install python and create virtual environment with minimal dependencies
 RUN apk add --no-cache python3 py3-pip && \
@@ -17,7 +17,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 WORKDIR /usr/src/app
 
 # Dependencies stage
-FROM base as deps
+FROM base AS deps
 
 COPY package*.json ./
 RUN npm ci --only=production && \
@@ -25,15 +25,15 @@ RUN npm ci --only=production && \
     npm cache clean --force
 
 # Development stage
-FROM deps as development
+FROM deps AS development
 ENV NODE_ENV=development
 
 # Install dev dependencies
 RUN npm install && \
     npm cache clean --force
 
-# Create upload directory
-RUN mkdir -p uploads
+# Create upload and logs directories
+RUN mkdir -p uploads /logs
 
 # Copy source with specific paths to avoid unnecessary files
 COPY src/ ./src/
@@ -48,11 +48,11 @@ EXPOSE 3000
 CMD ["npm", "run", "dev"]
 
 # Production stage
-FROM deps as production
+FROM deps AS production
 ENV NODE_ENV=production
 
-# Create upload directory
-RUN mkdir -p uploads
+# Create upload and logs directories
+RUN mkdir -p uploads /logs
 
 # Copy only necessary source files
 COPY src/ ./src/

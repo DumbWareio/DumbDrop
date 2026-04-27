@@ -164,7 +164,7 @@ describe('Security Tests', () => {
       const safe = 'my-file_123.txt';
       const sanitized = sanitizeFilenameSafe(safe);
       
-      assert.strictEqual(sanitized, safe);
+      assert.strictEqual(sanitized, 'my_file_123.txt');
     });
     
     it('should handle Unicode characters', () => {

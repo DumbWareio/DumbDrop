@@ -111,6 +111,7 @@ function isPathWithinUploadDir(filePath, uploadDir, requireExists = false) {
 ### 4. Added Tests
 
 Created `test/path-validation.test.js` with comprehensive tests:
+
 - ✅ Valid paths within upload directory
 - ✅ Nested folder structures
 - ✅ Paths with spaces and special characters
@@ -136,7 +137,7 @@ npm test -- test/path-validation.test.js
 ```yaml
 services:
   dumbdrop:
-    image: dumbwareio/dumbdrop:latest
+    image: ghcr.io/wickedyoda/dumbdrop:latest
     ports:
       - 3000:3000
     volumes:
@@ -150,7 +151,7 @@ services:
 ```yaml
 services:
   dumbdrop:
-    image: dumbwareio/dumbdrop:latest
+    image: ghcr.io/wickedyoda/dumbdrop:latest
     ports:
       - 3000:3000
     volumes:
@@ -186,6 +187,7 @@ The fix maintains security while improving compatibility:
 ## Backward Compatibility
 
 ✅ **Fully backward compatible**:
+
 - Named Docker volumes continue to work
 - Local development (`./local_uploads`) unaffected
 - All existing file operations work as before
@@ -193,7 +195,8 @@ The fix maintains security while improving compatibility:
 
 ## Performance Impact
 
-**Minimal**: 
+**Minimal**:
+
 - `path.resolve()` and `path.normalize()` are fast operations
 - Only use `fs.realpathSync()` when necessary (existing files)
 - No additional filesystem I/O for new uploads
@@ -206,6 +209,7 @@ The fix maintains security while improving compatibility:
 ## Future Improvements
 
 Potential enhancements:
+
 - Add integration tests with actual Docker bind mounts
 - Monitor for performance impact in high-load scenarios
 - Consider caching upload directory resolution
@@ -214,4 +218,3 @@ Potential enhancements:
 ## Summary
 
 This fix resolves the critical issue where files would disappear when using Docker bind mounts. The solution properly handles path validation for both existing and non-existing files while maintaining security against path traversal attacks.
-

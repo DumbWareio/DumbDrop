@@ -11,6 +11,7 @@ const { config } = require('../config');
 
 const METADATA_DIR = path.join(config.uploadDir, '.metadata');
 const UPLOAD_TIMEOUT = config.uploadTimeout || 30 * 60 * 1000; // Use a config or default (e.g., 30 mins)
+const FILE_RETENTION_CLEANUP_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
 
 let cleanupTasks = [];
 
@@ -238,13 +239,76 @@ async function cleanupIncompleteMetadataUploads() {
 // Schedule the new cleanup function
 const METADATA_CLEANUP_INTERVAL = 15 * 60 * 1000; // e.g., every 15 minutes
 let metadataCleanupTimer;
+let fileRetentionCleanupTimer;
 
 if (!process.env.DISABLE_BATCH_CLEANUP) {
   metadataCleanupTimer = setInterval(cleanupIncompleteMetadataUploads, METADATA_CLEANUP_INTERVAL);
   metadataCleanupTimer.unref(); // Allow process to exit if this is the only timer
+
+  fileRetentionCleanupTimer = setInterval(cleanupExpiredFiles, FILE_RETENTION_CLEANUP_INTERVAL);
+  fileRetentionCleanupTimer.unref();
   
   process.on('SIGTERM', () => clearInterval(metadataCleanupTimer));
   process.on('SIGINT', () => clearInterval(metadataCleanupTimer));
+  process.on('SIGTERM', () => clearInterval(fileRetentionCleanupTimer));
+  process.on('SIGINT', () => clearInterval(fileRetentionCleanupTimer));
+}
+
+async function cleanupExpiredFiles() {
+  const cutoff = Date.now() - config.fileRetentionMs;
+  logger.info(`Running retention cleanup for files older than ${config.fileRetentionMs}ms...`);
+
+  const walkAndCleanup = async (dirPath) => {
+    let entries;
+    try {
+      entries = await fs.readdir(dirPath);
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        logger.error(`Retention cleanup failed to read directory ${dirPath}: ${err.message}`);
+      }
+      return;
+    }
+
+    for (const entry of entries) {
+      if (entry === '.metadata') {
+        continue;
+      }
+
+      const fullPath = path.join(dirPath, entry);
+      let stats;
+      try {
+        stats = await fs.stat(fullPath);
+      } catch (err) {
+        if (err.code !== 'ENOENT') {
+          logger.error(`Retention cleanup failed to stat ${fullPath}: ${err.message}`);
+        }
+        continue;
+      }
+
+      if (stats.isDirectory()) {
+        await walkAndCleanup(fullPath);
+        continue;
+      }
+
+      if (!stats.isFile()) {
+        continue;
+      }
+
+      if (stats.mtime.getTime() <= cutoff) {
+        try {
+          await fs.unlink(fullPath);
+          logger.info(`Retention cleanup deleted expired file: ${fullPath}`);
+        } catch (err) {
+          if (err.code !== 'ENOENT') {
+            logger.error(`Failed to delete expired file ${fullPath}: ${err.message}`);
+          }
+        }
+      }
+    }
+  };
+
+  await walkAndCleanup(config.uploadDir);
+  await cleanupEmptyFolders(config.uploadDir);
 }
 
 /**
@@ -316,5 +380,6 @@ module.exports = {
   executeCleanup,
   cleanupIncompleteUploads,
   cleanupIncompleteMetadataUploads,
+  cleanupExpiredFiles,
   cleanupEmptyFolders
 }; 

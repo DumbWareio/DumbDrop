@@ -10,13 +10,15 @@ const fs = require('fs'); // Get version from package.json
  * PORT                - Port for the server (default: 3000)
  * NODE_ENV            - Node environment (default: 'development')
  * BASE_URL            - Base URL for the app (default: http://localhost:${PORT})
+ * PUBLIC_DOMAIN       - Public domain used for generated download links (default: BASE_URL origin)
  * UPLOAD_DIR          - Directory for uploads (Docker/production)
  * LOCAL_UPLOAD_DIR    - Directory for uploads (local dev, fallback: './local_uploads')
  * MAX_FILE_SIZE       - Max upload size in MB (default: 1024)
+ * FILE_RETENTION      - File retention period, format: <number>d or <number>h (default: 30d)
  * AUTO_UPLOAD         - Enable auto-upload (true/false, default: false)
  * SHOW_FILE_LIST      - Enable file listing in frontend (true/false, default: false)
  * DUMBDROP_PIN        - Security PIN for uploads (required for protected endpoints)
- * DUMBDROP_TITLE      - Site title (default: 'DumbDrop')
+ * DUMBDROP_TITLE      - Site title (default: "WickedYoda's DumbDrop")
  * APPRISE_URL         - Apprise notification URL (optional)
  * APPRISE_MESSAGE     - Notification message template (default provided)
  * APPRISE_SIZE_UNIT   - Size unit for notifications (optional)
@@ -30,23 +32,81 @@ const logConfig = (message, level = 'info') => {
 };
 
 // Default configurations
-const DEFAULT_SITE_TITLE = 'DumbDrop';
+const DEFAULT_SITE_TITLE = "WickedYoda's DumbDrop";
 const NODE_ENV = process.env.NODE_ENV || 'production';
 const PORT = process.env.PORT || 3000;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const PUBLIC_DOMAIN = process.env.PUBLIC_DOMAIN;
 const DEFAULT_CLIENT_MAX_RETRIES = 5; // Default retry count
+const DEFAULT_FILE_RETENTION = '30d';
+
+function resolvePublicDomain(rawPublicDomain, fallbackBaseUrl) {
+  const candidate = String(rawPublicDomain || '').trim();
+  if (candidate) {
+    const withProtocol = /^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`;
+    try {
+      return new URL(withProtocol).origin;
+    } catch {
+      logConfig(`PUBLIC_DOMAIN is invalid ("${candidate}"). Falling back to BASE_URL origin.`, 'warning');
+    }
+  }
+
+  try {
+    return new URL(fallbackBaseUrl).origin;
+  } catch {
+    return `http://localhost:${PORT}`;
+  }
+}
+
+const resolvedPublicDomain = resolvePublicDomain(PUBLIC_DOMAIN, BASE_URL);
 console.log('Loaded ENV:', {
   PORT,
   UPLOAD_DIR: process.env.UPLOAD_DIR,
   LOCAL_UPLOAD_DIR: process.env.LOCAL_UPLOAD_DIR,
   NODE_ENV,
   BASE_URL,
+  PUBLIC_DOMAIN: resolvedPublicDomain,
   ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS || '*',
 });
 const logAndReturn = (key, value, isDefault = false) => {
   logConfig(`${key}: ${value}${isDefault ? ' (default)' : ''}`);
   return value;
 };
+
+function getTermsLink() {
+  const rawTermsLink = process.env.TERMS_LINK || process.env.terms_link;
+  if (!rawTermsLink) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(rawTermsLink);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      logConfig(`Invalid TERMS_LINK protocol: ${parsed.protocol}. Use http or https.`, 'warning');
+      return null;
+    }
+    return rawTermsLink;
+  } catch {
+    logConfig(`Invalid TERMS_LINK URL: ${rawTermsLink}. Disabling terms link.`, 'warning');
+    return null;
+  }
+}
+
+function parseFileRetentionToMs(rawValue) {
+  const parsed = String(rawValue).trim().match(/^(\d+)([dh])$/i);
+  if (!parsed) {
+    throw new Error('FILE_RETENTION must be in format <number>d or <number>h (examples: 30d, 12h)');
+  }
+
+  const amount = parseInt(parsed[1], 10);
+  const unit = parsed[2].toLowerCase();
+  if (isNaN(amount) || amount <= 0) {
+    throw new Error('FILE_RETENTION number must be greater than 0');
+  }
+
+  const hourMs = 60 * 60 * 1000;
+  return unit === 'd' ? amount * 24 * hourMs : amount * hourMs;
+}
 
 /**
  * Determine the upload directory based on environment variables.
@@ -126,6 +186,11 @@ const config = {
    * Set via BASE_URL in .env
    */
   baseUrl: BASE_URL,
+  /**
+   * Public domain used for generated download links (default: BASE_URL origin)
+   * Set via PUBLIC_DOMAIN in .env
+   */
+  publicDomain: resolvedPublicDomain,
   
   // =====================
   // =====================
@@ -157,6 +222,27 @@ const config = {
    * Set via SHOW_FILE_LIST in .env
    */
   showFileList: process.env.SHOW_FILE_LIST === 'true',
+  /**
+   * File retention period in milliseconds.
+   * Set via FILE_RETENTION in .env using <number>d or <number>h (default: 30d)
+   */
+  fileRetentionMs: (() => {
+    const envValue = process.env.FILE_RETENTION;
+    const effectiveValue = envValue === undefined ? DEFAULT_FILE_RETENTION : envValue;
+
+    try {
+      const ms = parseFileRetentionToMs(effectiveValue);
+      logAndReturn('FILE_RETENTION', effectiveValue, envValue === undefined);
+      return ms;
+    } catch (err) {
+      if (envValue !== undefined) {
+        throw err;
+      }
+
+      logConfig(`Invalid default FILE_RETENTION value "${effectiveValue}". Falling back to ${DEFAULT_FILE_RETENTION}.`, 'warning');
+      return parseFileRetentionToMs(DEFAULT_FILE_RETENTION);
+    }
+  })(),
   
   // =====================
   // =====================
@@ -187,10 +273,15 @@ const config = {
   // UI settings
   // =====================
   /**
-   * Site title (default: 'DumbDrop')
+  * Site title (default: "WickedYoda's DumbDrop")
    * Set via DUMBDROP_TITLE in .env
    */
   siteTitle: process.env.DUMBDROP_TITLE || DEFAULT_SITE_TITLE,
+  /**
+   * Terms and Conditions URL (optional)
+   * Set via TERMS_LINK in .env
+   */
+  termsLink: getTermsLink(),
   
   // =====================
   // =====================

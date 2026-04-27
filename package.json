@@ -8,7 +8,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "test": "node --test test/**/*.test.js",
+    "test": "node --test",
     "predev": "node -e \"const v=process.versions.node.split('.');if(v[0]<20) {console.error('Node.js >=20.0.0 required');process.exit(1)}\""
   },
   "keywords": [],

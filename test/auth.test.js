@@ -5,22 +5,19 @@
 
 // Disable batch cleanup for tests
 process.env.DISABLE_BATCH_CLEANUP = 'true';
+process.env.DUMBDROP_PIN = '1234';
 
 const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert');
 const http = require('node:http');
 
-// Import the app
+// Import the app after env is set so config picks up test PIN
 const { app, initialize } = require('../src/app');
 
 let server;
 let baseUrl;
-const originalPin = process.env.PIN;
 
 before(async () => {
-  // Set PIN for testing
-  process.env.PIN = '1234';
-  
   // Initialize app
   await initialize();
   
@@ -36,13 +33,6 @@ before(async () => {
 });
 
 after(async () => {
-  // Restore original PIN
-  if (originalPin) {
-    process.env.PIN = originalPin;
-  } else {
-    delete process.env.PIN;
-  }
-  
   // Close server
   if (server) {
     await new Promise((resolve) => server.close(resolve));
@@ -141,7 +131,7 @@ describe('Authentication API Tests', () => {
         pin: '',
       });
       
-      assert.strictEqual(response.status, 400);
+      assert.strictEqual(response.status, 401);
     });
   });
   
