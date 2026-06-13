@@ -5,6 +5,13 @@
 
 // Disable batch cleanup for tests
 process.env.DISABLE_BATCH_CLEANUP = 'true';
+// Isolate this suite's uploads in a unique temp dir: parallel-safe and avoids
+// polluting ./local_uploads. UPLOAD_DIR takes priority and MUST be set before
+// the app is imported below, since config reads it once at module load.
+process.env.UPLOAD_DIR = require('node:path').join(
+  require('node:os').tmpdir(),
+  `dumbdrop-test-upload-${process.pid}`,
+);
 
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert');
@@ -20,9 +27,12 @@ let server;
 let baseUrl;
 
 before(async () => {
+  // Start from a clean temp dir (guards against stale content from a prior
+  // crashed run that reused this pid). initialize() recreates it + .metadata.
+  await fs.rm(config.uploadDir, { recursive: true, force: true });
   // Initialize app
   await initialize();
-  
+
   // Start server on random port
   server = http.createServer(app);
   await new Promise((resolve) => {
@@ -40,18 +50,9 @@ after(async () => {
     await new Promise((resolve) => server.close(resolve));
   }
   
-  // Clean up test uploads
+  // Remove the isolated temp upload dir
   try {
-    const testFiles = await fs.readdir(config.uploadDir);
-    for (const file of testFiles) {
-      if (file !== '.metadata') {
-        const filePath = path.join(config.uploadDir, file);
-        const stat = await fs.stat(filePath);
-        if (stat.isFile()) {
-          await fs.unlink(filePath);
-        }
-      }
-    }
+    await fs.rm(config.uploadDir, { recursive: true, force: true });
   } catch (err) {
     // Ignore cleanup errors
   }
@@ -249,7 +250,9 @@ describe('Upload API Tests', () => {
   
   describe('Batch uploads', () => {
     it('should handle multiple files with same batch ID', async () => {
-      const batchId = `batch-${crypto.randomBytes(4).toString('hex')}`;
+      // Must match the app's batch-ID contract: <digits>-<9 lowercase alphanumerics>
+      // (see isValidBatchId / the client generator in public/index.html).
+      const batchId = `${Date.now()}-${crypto.randomBytes(5).toString('hex').slice(0, 9)}`;
       
       // Initialize first file
       const file1Response = await makeRequest({

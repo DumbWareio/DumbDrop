@@ -5,6 +5,13 @@
 
 // Disable batch cleanup for tests
 process.env.DISABLE_BATCH_CLEANUP = 'true';
+// Isolate this suite's uploads in a unique temp dir: parallel-safe and avoids
+// polluting ./local_uploads. UPLOAD_DIR takes priority and MUST be set before
+// the app is imported below, since config reads it once at module load.
+process.env.UPLOAD_DIR = require('node:path').join(
+  require('node:os').tmpdir(),
+  `dumbdrop-test-files-${process.pid}`,
+);
 
 const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert');
@@ -20,9 +27,12 @@ let baseUrl;
 let testFilePath;
 
 before(async () => {
+  // Start from a clean temp dir (guards against stale content from a prior
+  // crashed run that reused this pid). initialize() recreates it + .metadata.
+  await fs.rm(config.uploadDir, { recursive: true, force: true });
   // Initialize app
   await initialize();
-  
+
   // Create a test file
   testFilePath = path.join(config.uploadDir, 'test-file.txt');
   await fs.writeFile(testFilePath, 'Test content');
@@ -44,18 +54,9 @@ after(async () => {
     await new Promise((resolve) => server.close(resolve));
   }
   
-  // Clean up test files
+  // Remove the isolated temp upload dir
   try {
-    const testFiles = await fs.readdir(config.uploadDir);
-    for (const file of testFiles) {
-      if (file !== '.metadata') {
-        const filePath = path.join(config.uploadDir, file);
-        const stat = await fs.stat(filePath);
-        if (stat.isFile()) {
-          await fs.unlink(filePath);
-        }
-      }
-    }
+    await fs.rm(config.uploadDir, { recursive: true, force: true });
   } catch (err) {
     // Ignore cleanup errors
   }
@@ -246,15 +247,34 @@ describe('File Management API Tests', () => {
       });
       
       assert.strictEqual(response.status, 200);
-      
-      // Verify new file exists
-      const newPath = path.join(config.uploadDir, 'renamed-file.txt');
+
+      // Verify new file exists. The hyphen is sanitized to an underscore by
+      // sanitizeFilenameSafe, so the stored name is 'renamed_file.txt'.
+      assert.strictEqual(response.data.newName, 'renamed_file.txt');
+      const newPath = path.join(config.uploadDir, 'renamed_file.txt');
       await fs.access(newPath);
       
       // Clean up
       await fs.unlink(newPath);
     });
-    
+
+    it('should return 404 when renaming a non-existent in-bounds file', async () => {
+      const response = await makeRequest({
+        host: 'localhost',
+        port: server.address().port,
+        path: '/api/files/rename/does-not-exist.txt',
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }, {
+        newName: 'whatever.txt',
+      });
+
+      // Missing but in-bounds source: 404, not a misleading 403 traversal block.
+      assert.strictEqual(response.status, 404);
+    });
+
     it('should reject empty new name', async () => {
       const response = await makeRequest({
         host: 'localhost',

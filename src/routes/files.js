@@ -49,13 +49,14 @@ router.get('/info/*', async (req, res) => {
   const filePath = path.join(config.uploadDir, req.params[0]);
   
   try {
-    // Ensure the path is within the upload directory (security check)
-    // Use requireExists=true since we're getting info on an existing file
-    if (!isPathWithinUploadDir(filePath, config.uploadDir, true)) {
+    // Validate the path stays within the upload directory (traversal guard only).
+    // requireExists=false so a missing but in-bounds file falls through to
+    // fs.stat and returns 404, instead of a misleading 403 "traversal" response.
+    if (!isPathWithinUploadDir(filePath, config.uploadDir, false)) {
       logger.warn(`Attempted path traversal attack: ${req.params[0]}`);
       return res.status(403).json({ error: 'Access denied' });
     }
-    
+
     const stats = await fs.stat(filePath);
     const fileInfo = {
       filename: req.params[0],
@@ -82,10 +83,11 @@ router.get('/download/*', async (req, res) => {
   const fileName = path.basename(req.params[0]);
   
   try {
-    // Ensure the file is within the upload directory (security check)
-    // This must be done BEFORE any filesystem operations to prevent path traversal
-    // Use requireExists=true since we're downloading an existing file
-    if (!isPathWithinUploadDir(filePath, config.uploadDir, true)) {
+    // Validate the path stays within the upload directory (traversal guard only).
+    // Must run BEFORE any filesystem access. requireExists=false so a missing
+    // but in-bounds file falls through to fs.access and returns 404 rather than
+    // a misleading 403 "traversal" response.
+    if (!isPathWithinUploadDir(filePath, config.uploadDir, false)) {
       logger.warn(`Attempted path traversal attack: ${req.params[0]}`);
       return res.status(403).json({ error: 'Access denied' });
     }
@@ -237,13 +239,14 @@ router.delete('/*', async (req, res) => {
   const itemPath = path.join(config.uploadDir, req.params[0]);
   
   try {
-    // Ensure the path is within the upload directory (security check)
-    // Use requireExists=true since we're deleting an existing file
-    if (!isPathWithinUploadDir(itemPath, config.uploadDir, true)) {
+    // Validate the path stays within the upload directory (traversal guard only).
+    // requireExists=false so a missing but in-bounds path falls through to
+    // fs.access and returns 404, instead of a misleading 403 "traversal" response.
+    if (!isPathWithinUploadDir(itemPath, config.uploadDir, false)) {
       logger.warn(`Attempted path traversal attack: ${req.params[0]}`);
       return res.status(403).json({ error: 'Access denied' });
     }
-    
+
     await fs.access(itemPath);
     const stats = await fs.stat(itemPath);
     
@@ -281,13 +284,14 @@ router.put('/rename/*', async (req, res) => {
   const currentDir = path.dirname(currentPath);
   
   try {
-    // Ensure the current path is within the upload directory (security check)
-    // Use requireExists=true since we're renaming an existing file
-    if (!isPathWithinUploadDir(currentPath, config.uploadDir, true)) {
+    // Validate the source path stays within the upload directory (traversal
+    // guard only). requireExists=false so a missing but in-bounds source falls
+    // through to fs.access and returns 404, consistent with the other routes.
+    if (!isPathWithinUploadDir(currentPath, config.uploadDir, false)) {
       logger.warn(`Attempted path traversal attack: ${req.params[0]}`);
       return res.status(403).json({ error: 'Access denied' });
     }
-    
+
     // Check if the current file/directory exists
     await fs.access(currentPath);
     const stats = await fs.stat(currentPath);

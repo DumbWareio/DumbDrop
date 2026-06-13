@@ -114,6 +114,17 @@ describe('Path Validation for Bind Mounts', () => {
     const outsidePath = path.join(os.tmpdir(), 'outside', 'file.txt');
     assert.strictEqual(isPathWithinUploadDir(outsidePath, testUploadDir, false), false);
   });
+
+  test('should treat an in-bounds path under an existing file as in-bounds (ENOTDIR)', () => {
+    // A path whose ancestor is a regular file is lexically in-bounds. Resolution
+    // must not throw (ENOTDIR) and misclassify it as a rejected traversal; the
+    // route layer turns the subsequent fs error into a 404, not a 403.
+    const realFile = path.join(testUploadDir, 'a-real-file.txt');
+    fs.writeFileSync(realFile, 'content');
+    const underFile = path.join(realFile, 'child.txt');
+    assert.strictEqual(isPathWithinUploadDir(underFile, testUploadDir, false), true);
+    fs.unlinkSync(realFile);
+  });
 });
 
 describe('Path Validation Edge Cases', () => {

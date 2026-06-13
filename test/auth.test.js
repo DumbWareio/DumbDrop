@@ -5,23 +5,33 @@
 
 // Disable batch cleanup for tests
 process.env.DISABLE_BATCH_CLEANUP = 'true';
+// Configure a PIN BEFORE requiring the app below: src/config reads DUMBDROP_PIN
+// at module load and freezes config, so setting it later (e.g. in before()) has
+// no effect. The app reads DUMBDROP_PIN, not PIN.
+process.env.DUMBDROP_PIN = '1234';
+// Isolate this suite's uploads in a unique temp dir: parallel-safe and avoids
+// polluting ./local_uploads. Must be set before the app is imported below.
+process.env.UPLOAD_DIR = require('node:path').join(
+  require('node:os').tmpdir(),
+  `dumbdrop-test-auth-${process.pid}`,
+);
 
 const { describe, it, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert');
 const http = require('node:http');
+const fs = require('node:fs').promises;
 
 // Import the app
-const { app, initialize } = require('../src/app');
+const { app, initialize, config } = require('../src/app');
 
 let server;
 let baseUrl;
-const originalPin = process.env.PIN;
 
 before(async () => {
-  // Set PIN for testing
-  process.env.PIN = '1234';
-  
-  // Initialize app
+  // Start from a clean temp dir (guards against stale content from a prior
+  // crashed run that reused this pid). initialize() recreates it + .metadata.
+  await fs.rm(config.uploadDir, { recursive: true, force: true });
+  // Initialize app (PIN already configured via DUMBDROP_PIN at the top of file)
   await initialize();
   
   // Start server on random port
@@ -36,16 +46,16 @@ before(async () => {
 });
 
 after(async () => {
-  // Restore original PIN
-  if (originalPin) {
-    process.env.PIN = originalPin;
-  } else {
-    delete process.env.PIN;
-  }
-  
   // Close server
   if (server) {
     await new Promise((resolve) => server.close(resolve));
+  }
+
+  // Remove the isolated temp upload dir
+  try {
+    await fs.rm(config.uploadDir, { recursive: true, force: true });
+  } catch {
+    // Ignore cleanup errors
   }
 });
 
@@ -140,8 +150,9 @@ describe('Authentication API Tests', () => {
       }, {
         pin: '',
       });
-      
-      assert.strictEqual(response.status, 400);
+
+      // validatePin('') is null -> route returns 401 "Invalid PIN format".
+      assert.strictEqual(response.status, 401);
     });
   });
   

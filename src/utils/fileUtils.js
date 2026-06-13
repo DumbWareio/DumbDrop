@@ -284,6 +284,41 @@ function isValidBatchId(batchId) {
 }
 
 /**
+ * Resolve a path to an absolute, symlink-resolved form even when the path
+ * (or a trailing portion of it) does not exist yet. Symlinks in the deepest
+ * existing ancestor are resolved via fs.realpathSync, then the non-existent
+ * remainder is re-appended. This keeps comparisons consistent with a
+ * realpath'd upload directory (e.g. macOS /var -> /private/var, or Docker
+ * bind-mount symlinks), which a bare path.resolve would not.
+ * @param {string} targetPath - The path to resolve (may not exist)
+ * @returns {string} Absolute, symlink-resolved path
+ */
+function realpathAllowingMissing(targetPath) {
+  const resolved = path.resolve(targetPath);
+  let current = resolved;
+  const missing = [];
+  for (;;) {
+    try {
+      const real = fs.realpathSync(current);
+      return missing.length ? path.join(real, ...missing.reverse()) : real;
+    } catch {
+      // Any error (ENOENT for a missing segment, ENOTDIR when an ancestor is a
+      // file, EACCES/ELOOP on an unreadable or looping ancestor) means this
+      // segment is not resolvable. Walk up and keep the segment as a literal.
+      const parent = path.dirname(current);
+      if (parent === current) {
+        // No resolvable ancestor at all: fall back to the lexical absolute
+        // path. The caller's relative('..') bounds check still applies, so a
+        // traversal target stays rejected; an in-bounds target stays in-bounds.
+        return resolved;
+      }
+      missing.push(path.basename(current));
+      current = parent;
+    }
+  }
+}
+
+/**
  * Check if a file path is within the upload directory
  * Works with both existing and non-existing files, and handles Docker bind mounts correctly
  * This function does NOT require the file to exist, making it suitable for upload validation
@@ -299,7 +334,7 @@ function isPathWithinUploadDir(filePath, uploadDir, requireExists = false) {
     let realUploadDir;
     try {
       realUploadDir = fs.realpathSync(uploadDir);
-    } catch (err) {
+    } catch {
       logger.error(`Upload directory does not exist or is inaccessible: ${uploadDir}`);
       return false;
     }
@@ -315,17 +350,17 @@ function isPathWithinUploadDir(filePath, uploadDir, requireExists = false) {
       // File exists, resolve symlinks for security
       try {
         resolvedFilePath = fs.realpathSync(filePath);
-      } catch (err) {
+      } catch {
         logger.error(`Failed to resolve existing file path: ${filePath}`);
         return false;
       }
     } else {
-      // For non-existing files (like during upload), use path.resolve
-      // This normalizes the path without requiring it to exist
-      resolvedFilePath = path.resolve(filePath);
-      
-      // Normalize both paths to use consistent separators
-      resolvedFilePath = path.normalize(resolvedFilePath);
+      // For non-existing files (like during upload), resolve symlinks in the
+      // deepest existing ancestor so the comparison stays consistent with the
+      // realpath'd upload directory. A bare path.resolve would leave symlinked
+      // prefixes unresolved (e.g. /var vs /private/var on macOS, Docker bind
+      // mounts) and wrongly reject valid in-bounds paths.
+      resolvedFilePath = realpathAllowingMissing(filePath);
     }
     
     // Normalize the upload directory path as well
