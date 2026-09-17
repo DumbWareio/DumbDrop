@@ -79,6 +79,16 @@ For local development setup, troubleshooting, and advanced usage, see the dedica
 
 👉 [Local Development Guide](LOCAL_DEVELOPMENT.md)
 
+
+## Easypanel
+
+DumbDrop has a one-click deployment template on [Easypanel](https://easypanel.io), a self-hosted Docker deployment platform.
+
+[![Deploy on Easypanel][easypanel-btn]][easypanel-deploy]
+
+[easypanel-btn]: https://easypanel.io/img/deploy-on-easypanel-40.svg
+[easypanel-deploy]: https://easypanel.io/templates/dumbdrop
+
 ## Features
 
 - 🚀 Drag and drop file uploads
